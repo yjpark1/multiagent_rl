@@ -8,6 +8,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
+.idea/
 build/
 develop-eggs/
 dist/
@@ -102,3 +103,5 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+*.xml
+*.xml
