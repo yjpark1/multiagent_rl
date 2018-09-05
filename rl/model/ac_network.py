@@ -51,9 +51,9 @@ class ActorNetwork(nn.Module):
         """
         out = F.relu(self.dense1(obs))
         out, _ = self.bilstm(out)
-        out = F.relu(out)        
-        out = F.tanh(self.dense2(out))
-
+        out = F.relu(out)
+        out = self.dense2(out)
+        out = nn.Softmax(dim=2)(out)
         return out
 
 
@@ -76,19 +76,20 @@ class CriticNetwork(nn.Module):
         self.nonlin = F.relu
         self.dense1 = TimeDistributed(nn.Linear(input_dim, 24))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
-        self.bilstm = nn.LSTM(24, 12, num_layers=1,
-                              batch_first=True, bidirectional=True)
-        self.dense2 = TimeDistributed(nn.Linear(24, out_dim))
+        self.lstm = nn.LSTM(24, 24, num_layers=1,
+                            batch_first=True, bidirectional=False)
+        self.dense2 = nn.Linear(24, out_dim)
 
-    def forward(self, obs):
+    def forward(self, obs, action):
         """
         Inputs:
             X (PyTorch Matrix): Batch of observations
         Outputs:
             out (PyTorch Matrix): Output of network (actions, values, etc)
         """
-        out = F.relu(self.dense1(obs))
-        out, _ = self.bilstm(out)
+        obs_act = torch.cat((obs, action), dim=-1)
+        out = F.relu(self.dense1(obs_act))
+        out, _ = self.lstm(out)
         out = F.relu(out[:, -1, :])
         out = self.dense2(out)
         return out

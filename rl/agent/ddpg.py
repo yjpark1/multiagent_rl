@@ -3,6 +3,7 @@ from __future__ import division
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
 import shutil
 from rl import arglist
 import copy
@@ -15,8 +16,13 @@ TAU = 0.001
 class Trainer:
     def __init__(self, actor, critic, memory):
         """
-        sdfsdf
+        DDPG for categorical action
         """
+        dtype = torch.float64
+        torch.set_default_dtype(dtype)
+        self.device = torch.device('cuda', index=arglist.gpu_index) if torch.cuda.is_available() \
+            else torch.device('cpu')
+
         self.iter = 0
         self.actor = actor
         self.target_actor = copy.deepcopy(actor)
@@ -51,13 +57,30 @@ class Trainer:
         for target_param, param in zip(target.parameters(), source.parameters()):
             target_param.data.copy_(param.data)
 
+    def process_obs(self, obs):
+        obs = np.array(obs, dtype='float32')
+        return obs
+
+    def process_action(self, actions):
+        actions = np.argmax(actions, axis=-1)
+        actions = actions.reshape(-1)
+        return actions
+
+    def process_reward(self, rewards):
+        rewards = np.array(rewards, dtype='float32')
+        return rewards
+
+    def process_done(self, done):
+        done = np.array(done, dtype='float32')
+        return done
+
     def get_exploitation_action(self, state):
         """
         gets the action from target actor added with exploration noise
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = Variable(torch.from_numpy(state))
+        state = torch.from_numpy(state)
         action = self.target_actor.forward(state).detach()
         return action.data.numpy()
 
@@ -67,9 +90,10 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = Variable(torch.from_numpy(state))
+        state = np.expand_dims(state, axis=0)
+        state = torch.from_numpy(state)
         action = self.actor.forward(state).detach()
-        new_action = action.data.numpy() + (self.noise.sample() * self.action_lim)
+        new_action = action.data.numpy()  # + (self.noise.sample() * self.action_lim)
         return new_action
 
     def optimize(self):
@@ -77,19 +101,26 @@ class Trainer:
         Samples a random batch from replay memory and performs optimization
         :return:
         """
-        s1, a1, r1, s2 = self.ram.sample(arglist.batch_size)
+        s1, a1, r1, s2, d = self.memory.sample(arglist.batch_size)
 
-        s1 = Variable(torch.from_numpy(s1))
-        a1 = Variable(torch.from_numpy(a1))
-        r1 = Variable(torch.from_numpy(r1))
-        s2 = Variable(torch.from_numpy(s2))
+        s1 = self.process_obs(s1)
+        a1 = self.process_action(a1)
+        r1 = self.process_reward(r1)
+        s2 = self.process_obs(s2)
+        d = self.process_done(d)
+
+        s1 = torch.from_numpy(s1)
+        a1 = torch.from_numpy(a1)
+        r1 = torch.from_numpy(r1)
+        s2 = torch.from_numpy(s2)
+        d = torch.from_numpy(d)
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
         a2 = self.target_actor.forward(s2).detach()
-        next_val = torch.squeeze(self.target_critic.forward(s2, a2).detach())
+        q_next = torch.squeeze(self.target_critic.forward(s2, a2).detach())
         # y_exp = r + gamma*Q'( s2, pi'(s2))
-        y_expected = r1 + GAMMA*next_val
+        y_expected = r1 + GAMMA * q_next * (1 - d)
         # y_pred = Q( s1, a1)
         y_predicted = torch.squeeze(self.critic.forward(s1, a1))
         # compute critic loss, and update the critic
@@ -112,6 +143,7 @@ class Trainer:
         # 	print 'Iteration :- ', self.iter, ' Loss_actor :- ', loss_actor.data.numpy(),\
         # 		' Loss_critic :- ', loss_critic.data.numpy()
         # self.iter += 1
+        return loss_actor, loss_critic
 
     def save_models(self, episode_count):
         """
