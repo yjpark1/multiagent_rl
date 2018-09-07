@@ -7,6 +7,7 @@ import numpy as np
 import shutil
 from rl import arglist
 import copy
+from rl.utils import to_categorical
 
 arglist.batch_size = 128
 GAMMA = 0.99
@@ -33,6 +34,7 @@ class Trainer:
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), arglist.learning_rate)
 
         self.memory = memory
+        self.nb_actions = 5
 
     def soft_update(self, target, source, tau):
         """
@@ -74,6 +76,11 @@ class Trainer:
         done = np.array(done, dtype='float32')
         return done
 
+    def to_onehot(self, a1):
+        a1 = to_categorical(a1, num_classes=self.nb_actions)
+        a1 = a1.astype('float32')
+        return a1
+
     def get_exploitation_action(self, state):
         """
         gets the action from target actor added with exploration noise
@@ -104,7 +111,7 @@ class Trainer:
         s1, a1, r1, s2, d = self.memory.sample(arglist.batch_size)
 
         s1 = self.process_obs(s1)
-        a1 = self.process_action(a1)
+        a1 = self.to_onehot(a1)
         r1 = self.process_reward(r1)
         s2 = self.process_obs(s2)
         d = self.process_done(d)

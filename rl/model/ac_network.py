@@ -50,11 +50,14 @@ class ActorNetwork(nn.Module):
             out (PyTorch Matrix): Output of network (actions, values, etc)
         """
         out = F.relu(self.dense1(obs))
-        out, _ = self.bilstm(out)
+        out, _ = self.bilstm(out, None)
         out = F.relu(out)
         out = self.dense2(out)
         out = nn.Softmax(dim=2)(out)
         return out
+
+    def init_hidden(self):
+        return torch.zeros(-1, 3, 24)
 
 
 class CriticNetwork(nn.Module):
@@ -89,7 +92,10 @@ class CriticNetwork(nn.Module):
         """
         obs_act = torch.cat((obs, action), dim=-1)
         out = F.relu(self.dense1(obs_act))
-        out, _ = self.lstm(out)
+        out, _ = self.lstm(out, None)
         out = F.relu(out[:, -1, :])
         out = self.dense2(out)
         return out
+
+    def init_hidden(self):
+        return torch.zeros(-1, 3, 24)
