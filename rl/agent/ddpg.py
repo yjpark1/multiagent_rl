@@ -2,7 +2,6 @@
 from __future__ import division
 import torch
 import torch.nn.functional as F
-from torch.autograd import Variable
 import numpy as np
 import shutil
 from rl import arglist
@@ -10,7 +9,7 @@ import copy
 from rl.utils import to_categorical
 
 arglist.batch_size = 128
-GAMMA = 0.99
+GAMMA = 0.95
 TAU = 0.001
 
 
@@ -127,13 +126,14 @@ class Trainer:
         a2 = self.target_actor.forward(s2).detach()
         q_next = torch.squeeze(self.target_critic.forward(s2, a2).detach())
         # y_exp = r + gamma*Q'( s2, pi'(s2))
-        y_expected = r1 + GAMMA * q_next * (1 - d)
+        y_expected = r1 + GAMMA * q_next * (1. - d)
         # y_pred = Q( s1, a1)
         y_predicted = torch.squeeze(self.critic.forward(s1, a1))
         # compute critic loss, and update the critic
         loss_critic = F.smooth_l1_loss(y_predicted, y_expected)
         self.critic_optimizer.zero_grad()
         loss_critic.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
         self.critic_optimizer.step()
 
         # ---------------------- optimize actor ----------------------
@@ -141,6 +141,7 @@ class Trainer:
         loss_actor = -1*torch.sum(self.critic.forward(s1, pred_a1))
         self.actor_optimizer.zero_grad()
         loss_actor.backward()
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
         self.actor_optimizer.step()
 
         self.soft_update(self.target_actor, self.actor, arglist.tau)
