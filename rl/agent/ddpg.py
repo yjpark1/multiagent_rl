@@ -20,16 +20,15 @@ class Trainer:
         """
         dtype = torch.float64
         torch.set_default_dtype(dtype)
-        self.device = torch.device('cuda', index=arglist.gpu_index) if torch.cuda.is_available() \
-            else torch.device('cpu')
+        self.device = torch.device('cuda:0')
 
         self.iter = 0
-        self.actor = actor
-        self.target_actor = copy.deepcopy(actor)
+        self.actor = actor.to(self.device)
+        self.target_actor = copy.deepcopy(actor).to(self.device)
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), arglist.learning_rate)
 
-        self.critic = critic
-        self.target_critic = copy.deepcopy(critic)
+        self.critic = critic.to(self.device)
+        self.target_critic = copy.deepcopy(critic).to(self.device)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), arglist.learning_rate)
 
         self.memory = memory
@@ -86,9 +85,11 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = torch.from_numpy(state)
+        state = torch.from_numpy(state).to(self.device)
         action = self.target_actor.forward(state).detach()
-        return action.data.numpy()
+        action = action.data.numpy().to(self.device)
+
+        return action
 
     def get_exploration_action(self, state):
         """
@@ -97,7 +98,7 @@ class Trainer:
         :return: sampled action (Numpy array)
         """
         state = np.expand_dims(state, axis=0)
-        state = torch.from_numpy(state)
+        state = torch.from_numpy(state).to(self.device)
         action = self.actor.forward(state).detach()
         new_action = action.data.cpu().numpy()  # + (self.noise.sample() * self.action_lim)
         return new_action
@@ -115,11 +116,11 @@ class Trainer:
         s2 = self.process_obs(s2)
         d = self.process_done(d)
 
-        s1 = torch.from_numpy(s1)
-        a1 = torch.from_numpy(a1)
-        r1 = torch.from_numpy(r1)
-        s2 = torch.from_numpy(s2)
-        d = torch.from_numpy(d)
+        s1 = torch.from_numpy(s1).to(self.device)
+        a1 = torch.from_numpy(a1).to(self.device)
+        r1 = torch.from_numpy(r1).to(self.device)
+        s2 = torch.from_numpy(s2).to(self.device)
+        d = torch.from_numpy(d).to(self.device)
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
@@ -147,10 +148,6 @@ class Trainer:
         self.soft_update(self.target_actor, self.actor, arglist.tau)
         self.soft_update(self.target_critic, self.critic, arglist.tau)
 
-        # if self.iter % 100 == 0:
-        # 	print 'Iteration :- ', self.iter, ' Loss_actor :- ', loss_actor.data.numpy(),\
-        # 		' Loss_critic :- ', loss_critic.data.numpy()
-        # self.iter += 1
         return loss_actor, loss_critic
 
     def save_models(self, episode_count):

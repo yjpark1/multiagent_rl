@@ -118,6 +118,8 @@ def run(cnt):
 
         # saves final episode reward for plotting training curve later
         if nb_episode > arglist.num_episodes:
+            np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
+
             rew_file_name = arglist.exp_name + '{}_rewards.pkl'.format(cnt)
             with open(rew_file_name, 'wb') as fp:
                 pickle.dump(final_ep_rewards, fp)
