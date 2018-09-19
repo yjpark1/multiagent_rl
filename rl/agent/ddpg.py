@@ -99,7 +99,7 @@ class Trainer:
         state = np.expand_dims(state, axis=0)
         state = torch.from_numpy(state)
         action = self.actor.forward(state).detach()
-        new_action = action.data.numpy()  # + (self.noise.sample() * self.action_lim)
+        new_action = action.data.cpu().numpy()  # + (self.noise.sample() * self.action_lim)
         return new_action
 
     def optimize(self):
