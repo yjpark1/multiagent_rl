@@ -18,8 +18,6 @@ class Trainer:
         """
         DDPG for categorical action
         """
-        dtype = torch.float64
-        torch.set_default_dtype(dtype)
         self.device = torch.device('cuda:0')
 
         self.iter = 0
@@ -62,6 +60,8 @@ class Trainer:
 
     def process_obs(self, obs):
         obs = np.array(obs, dtype='float32')
+        obs = np.expand_dims(obs, axis=0)
+        obs = torch.from_numpy(obs)
         return obs
 
     def process_action(self, actions):
@@ -71,15 +71,18 @@ class Trainer:
 
     def process_reward(self, rewards):
         rewards = np.array(rewards, dtype='float32')
+        rewards = torch.from_numpy(rewards)
         return rewards
 
     def process_done(self, done):
         done = np.array(done, dtype='float32')
+        done = torch.from_numpy(done)
         return done
 
     def to_onehot(self, a1):
         a1 = to_categorical(a1, num_classes=self.nb_actions)
         a1 = a1.astype('float32')
+        a1 = torch.from_numpy(a1)
         return a1
 
     def get_exploitation_action(self, state):
@@ -88,10 +91,9 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = torch.from_numpy(state).to(self.device)
+        # state = torch.from_numpy(state).to(self.device)
         action = self.target_actor.forward(state).detach()
-        action = action.data.numpy().to(self.device)
-
+        # action = action.data.numpy().to(self.device)
         return action
 
     def get_exploration_action(self, state):
@@ -100,8 +102,8 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = np.expand_dims(state, axis=0)
-        state = torch.from_numpy(state).to(self.device)
+        # state = np.expand_dims(state, axis=0)
+        state = state.to(self.device)
         action = self.actor.forward(state).detach()
         new_action = action.data.cpu().numpy()  # + (self.noise.sample() * self.action_lim)
         return new_action
@@ -113,17 +115,23 @@ class Trainer:
         """
         s1, a1, r1, s2, d = self.memory.sample(arglist.batch_size)
 
-        s1 = self.process_obs(s1)
-        a1 = self.to_onehot(a1)
-        r1 = self.process_reward(r1)
-        s2 = self.process_obs(s2)
-        d = self.process_done(d)
+        # s1 = self.process_obs(s1)
+        # a1 = self.to_onehot(a1)
+        # r1 = self.process_reward(r1)
+        # s2 = self.process_obs(s2)
+        # d = self.process_done(d)
 
-        s1 = torch.from_numpy(s1).to(self.device)
-        a1 = torch.from_numpy(a1).to(self.device)
-        r1 = torch.from_numpy(r1).to(self.device)
-        s2 = torch.from_numpy(s2).to(self.device)
-        d = torch.from_numpy(d).to(self.device)
+        # s1 = torch.from_numpy(s1).to(self.device)
+        # a1 = torch.from_numpy(a1).to(self.device)
+        # r1 = torch.from_numpy(r1).to(self.device)
+        # s2 = torch.from_numpy(s2).to(self.device)
+        # d = torch.from_numpy(d).to(self.device)
+
+        s1 = s1.to(self.device)
+        a1 = a1.to(self.device)
+        r1 = r1.to(self.device)
+        s2 = s2.to(self.device)
+        d = d.to(self.device)
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
@@ -142,7 +150,8 @@ class Trainer:
 
         # ---------------------- optimize actor ----------------------
         pred_a1 = self.actor.forward(s1)
-        loss_actor = -1*torch.sum(self.critic.forward(s1, pred_a1))
+        entropy = torch.sum(pred_a1 * torch.log(pred_a1), dim=-1).mean()
+        loss_actor = -1*torch.sum(self.critic.forward(s1, pred_a1)) + entropy * 0.05
         self.actor_optimizer.zero_grad()
         loss_actor.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)

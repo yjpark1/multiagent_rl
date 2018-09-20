@@ -60,29 +60,30 @@ def run(cnt):
         # environment step
         new_obs, rewards, done, info = env.step(actions)
         rewards = agent.process_reward(rewards)
-        rewards = np.mean(rewards)
+        rewards = rewards.mean()
         episode_step += 1
         done = all(done)
         terminal = (episode_step >= arglist.max_episode_len)
-
+        terminal = agent.process_done(done or terminal)
         # collect experience
         # obs, actions, rewards, new_obs, done
-        agent.memory.add(obs, actions, rewards, new_obs, done or terminal)
+        actions = agent.to_onehot(actions)
+        agent.memory.add(obs, actions, rewards, agent.process_obs(new_obs), terminal)
         obs = new_obs
         # episode_rewards.append(rewards)
-
+        rewards = rewards.item()
         for i, rew in enumerate([rewards] * env.n):
             episode_rewards[-1] += rew
             agent_rewards[i][-1] += rew
 
         # for displaying learned policies
         if arglist.display:
-            if done or terminal:
+            if terminal:
                 time.sleep(0.1)
                 env.render()
             # continue
 
-        if done or terminal:
+        if terminal:
             obs = env.reset()
             episode_step = 0
             nb_episode += 1
@@ -94,7 +95,7 @@ def run(cnt):
 
         # update all trainers, if not in display or benchmark mode
         loss = [np.nan, np.nan]
-        if train_step > arglist.warmup_steps:
+        if (train_step > arglist.warmup_steps) and (train_step % 100 == 0):
             loss = agent.optimize()
             loss = [loss[0].data.item(), loss[1].data.item()]
 
@@ -106,7 +107,7 @@ def run(cnt):
             print('step: {}, actor_loss: {}, critic_loss: {}'.format(train_step, loss[0], loss[1]))
 
         elif verbose_episode:
-            if (done or terminal) and (len(episode_rewards) % arglist.save_rate == 0):
+            if terminal and (len(episode_rewards) % arglist.save_rate == 0):
                 print("steps: {}, episodes: {}, mean episode reward: {}, reward: {}, time: {}".format(
                     train_step, len(episode_rewards), round(np.mean(episode_rewards[-arglist.save_rate:]), 3),
                     round(np.mean(terminal_reward), 3), round(time.time() - t_start, 3)))

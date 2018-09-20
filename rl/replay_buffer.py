@@ -3,6 +3,7 @@ from collections import deque, namedtuple
 import warnings
 import random
 import numpy as np
+import torch
 
 
 class MemoryBuffer:
@@ -20,12 +21,16 @@ class MemoryBuffer:
         batch = []
         count = min(batch_size, self.len)
         batch = random.sample(self.buffer, count)
-
-        s_arr = np.float32([arr[0] for arr in batch])
-        a_arr = np.float32([arr[1] for arr in batch])
-        r_arr = np.float32([arr[2] for arr in batch])
-        s1_arr = np.float32([arr[3] for arr in batch])
-        d_arr = np.float32([arr[4] for arr in batch])
+        # s_arr = np.float32([arr[0] for arr in batch])
+        # a_arr = np.float32([arr[1] for arr in batch])
+        # r_arr = np.float32([arr[2] for arr in batch])
+        # s1_arr = np.float32([arr[3] for arr in batch])
+        # d_arr = np.float32([arr[4] for arr in batch])
+        s_arr = torch.cat([arr[0] for arr in batch])
+        a_arr = torch.stack([arr[1] for arr in batch])
+        r_arr = torch.stack([arr[2] for arr in batch])
+        s1_arr = torch.cat([arr[3] for arr in batch])
+        d_arr = torch.stack([arr[4] for arr in batch])
 
         return s_arr, a_arr, r_arr, s1_arr, d_arr
 
