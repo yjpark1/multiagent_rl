@@ -8,6 +8,7 @@ import time
 from rl import arglist
 import pickle
 from rl.replay_buffer import SequentialMemory, MemoryBuffer
+# torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def run(cnt):
     # load scenario from script
@@ -120,13 +121,14 @@ def run(cnt):
         if nb_episode > arglist.num_episodes:
             np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
 
-            rew_file_name = arglist.exp_name + '{}_rewards.pkl'.format(cnt)
+            rew_file_name = 'experiments/' + arglist.exp_name + '{}_rewards.pkl'.format(cnt)
             with open(rew_file_name, 'wb') as fp:
                 pickle.dump(final_ep_rewards, fp)
-            agrew_file_name = arglist.exp_name + '{}_agrewards.pkl'.format(cnt)
+            agrew_file_name = 'experiments/' + arglist.exp_name + '{}_agrewards.pkl'.format(cnt)
             with open(agrew_file_name, 'wb') as fp:
                 pickle.dump(final_ep_ag_rewards, fp)
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
+
             break
 
     # np.save('history_rewards_{}.npy'.format(cnt), history_rewards)
@@ -135,6 +137,8 @@ def run(cnt):
 
 if __name__ == '__main__':
     for cnt in range(10):
+        torch.cuda.empty_cache()
+        torch.set_default_tensor_type('torch.FloatTensor')
         run(cnt)
 
 ##############################

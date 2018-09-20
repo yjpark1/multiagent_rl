@@ -34,6 +34,9 @@ class Trainer:
         self.memory = memory
         self.nb_actions = 5
 
+        self.target_actor.eval()
+        self.target_critic.eval()
+
     def soft_update(self, target, source, tau):
         """
         Copies the parameters from source network (x) to target network (y) using the below update
