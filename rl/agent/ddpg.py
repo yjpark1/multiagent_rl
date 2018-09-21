@@ -151,7 +151,11 @@ class Trainer:
         # ---------------------- optimize actor ----------------------
         pred_a1 = self.actor.forward(s1)
         entropy = torch.sum(pred_a1 * torch.log(pred_a1), dim=-1).mean()
-        loss_actor = -1*torch.sum(self.critic.forward(s1, pred_a1)) + entropy * 0.05
+        l2_reg = torch.cuda.FloatTensor(1)
+        for W in self.actor.parameters():
+            l2_reg = l2_reg + W.norm(2)
+
+        loss_actor = -1*torch.sum(self.critic.forward(s1, pred_a1)) + entropy * 0.05 + l2_reg * 0.001
         self.actor_optimizer.zero_grad()
         loss_actor.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)

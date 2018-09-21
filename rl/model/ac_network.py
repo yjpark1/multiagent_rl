@@ -53,7 +53,7 @@ class ActorNetwork(nn.Module):
         out, _ = self.bilstm(out, None)
         out = F.relu(out)
         out = self.dense2(out)
-        out = nn.Softmax(dim=2)(out)
+        out = nn.Softmax(dim=-1)(out)
         return out
 
 
