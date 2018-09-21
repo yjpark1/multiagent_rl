@@ -106,3 +106,4 @@ venv.bak/
 *.xml
 *.xml
 *.xml
+.idea/vcs.xml
