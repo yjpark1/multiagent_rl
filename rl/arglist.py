@@ -5,4 +5,4 @@ learning_rate = 1e-3
 tau = 0.001
 warmup_steps = 200
 save_rate = 100
-exp_name = 'proposed_'
+exp_name = 'model_'
