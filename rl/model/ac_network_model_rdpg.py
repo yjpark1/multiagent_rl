@@ -11,13 +11,36 @@ class TimeDistributed(nn.Module):
     def forward(self, x):
         if len(x.size()) <= 2:
             return self.module(x)
-        t, n = x.size(0), x.size(1)
-        # merge batch and seq dimensions
-        x_reshape = x.contiguous().view(t * n, x.size(2))
-        y = self.module(x_reshape)
-        # We have to reshape Y
-        y = y.contiguous().view(t, n, y.size()[1])
-        return y
+            # reshape
+        elif len(x.size()) == 3:
+            # shape: (seq_len, batch, features)
+            seq_len, b, n = x.size(0), x.size(1), x.size(2)
+            # merge batch and seq dimensions
+            x_reshape = x.contiguous().view(seq_len, b * n)
+
+        elif len(x.size()) == 4:
+            # shape: (seq_len, batch, documents, features)
+            seq_len, b, n, d = x.size(0), x.size(1), x.size(2), x.size(3)
+            # merge batch and seq dimensions
+            x_reshape = x.contiguous().view(seq_len, b * n, d)
+
+            # return
+        if hasattr(self.module, 'rnn'):
+            y, h = self.module(x_reshape)
+            # shape: (seq_len, batch x documents, features)
+            y = y.contiguous().view(seq_len, b, n, y.size()[-1])
+            # shape: (seq_len, batch, documents, features)
+
+            # shape: (batch, documents, features)
+            h = h.contiguous().view(1, b, n, h.size()[-1])
+            return y, h
+
+        else:
+            y = self.module(x_reshape)
+            # We have to reshape Y
+            # shape: (seq_len, batch, documents, features)
+            y = y.contiguous().view(seq_len, b, n, y.size()[-1])
+            return y
 
 
 class ActorNetwork(nn.Module):
