@@ -56,14 +56,17 @@ class MemoryBuffer:
 # This is to be understood as a transition: Given `state0`, performing `action`
 # yields `reward` and results in `state1`, which might be `terminal`.
 Experience = namedtuple('Experience', 'state0, action, reward, state1, terminal1')
+EpisodicTimestep = namedtuple('EpisodicTimestep', 'observation, action, reward, terminal')
 
 
 def sample_batch_indexes(low, high, size):
     """Return a sample of (size) unique elements between low and high
+
         # Argument
             low (int): The minimum value for our samples
             high (int): The maximum value for our samples
             size (int): The number of samples to pick
+
         # Returns
             A list of samples of length size, with values between low and high
         """
@@ -72,14 +75,16 @@ def sample_batch_indexes(low, high, size):
         # batch. We cannot use `np.random.choice` here because it is horribly inefficient as
         # the memory grows. See https://github.com/numpy/numpy/issues/2764 for a discussion.
         # `random.sample` does the same thing (drawing without replacement) and is way faster.
-        r = range(low, high)
+        try:
+            r = xrange(low, high)
+        except NameError:
+            r = range(low, high)
         batch_idxs = random.sample(r, size)
     else:
         # Not enough data. Help ourselves with sampling from the range, but the same index
         # can occur multiple times. This is not good and should be avoided by picking a
         # large enough warm-up phase.
-        warnings.warn(
-            'Not enough entries to sample without replacement. Consider increasing your warm-up phase to avoid oversampling!')
+        warnings.warn('Not enough entries to sample without replacement. Consider increasing your warm-up phase to avoid oversampling!')
         batch_idxs = np.random.random_integers(low, high - 1, size=size)
     assert len(batch_idxs) == size
     return batch_idxs
@@ -88,44 +93,53 @@ def sample_batch_indexes(low, high, size):
 class RingBuffer(object):
     def __init__(self, maxlen):
         self.maxlen = maxlen
-        self.data = deque(maxlen=maxlen)
+        self.start = 0
+        self.length = 0
+        self.data = [None for _ in range(maxlen)]
 
     def __len__(self):
-        return self.length()
+        return self.length
 
     def __getitem__(self, idx):
         """Return element of buffer at specific index
+
         # Argument
             idx (int): Index wanted
+
         # Returns
             The element of buffer at given index
         """
-        if idx < 0 or idx >= self.length():
+        if idx < 0:
+            idx = self.length + idx
+
+        if idx < 0 or idx >= self.length:
             raise KeyError()
-        return self.data[idx]
+        return self.data[(self.start + idx) % self.maxlen]
 
     def append(self, v):
         """Append an element to the buffer
+
         # Argument
             v (object): Element to append
         """
-        self.data.append(v)
-
-    def length(self):
-        """Return the length of Deque
-        # Argument
-            None
-        # Returns
-            The lenght of deque element
-        """
-        return len(self.data)
+        if self.length < self.maxlen:
+            # We have space, simply increase the length.
+            self.length += 1
+        elif self.length == self.maxlen:
+            # No space, "remove" the first item.
+            self.start = (self.start + 1) % self.maxlen
+        else:
+            # This should never happen.
+            raise RuntimeError()
+        self.data[(self.start + self.length - 1) % self.maxlen] = v
 
 
 def zeroed_observation(observation):
     """Return an array of zeros with same shape as given observation
+
     # Argument
         observation (list): List of observation
-
+    
     # Return
         A np.ndarray of zeros with observation.shape
     """
@@ -157,8 +171,10 @@ class Memory(object):
 
     def get_recent_state(self, current_observation):
         """Return list of last observations
+
         # Argument
             current_observation (object): Last observation
+
         # Returns
             A list of the last observations
         """
@@ -181,7 +197,7 @@ class Memory(object):
 
     def get_config(self):
         """Return configuration (window_length, ignore_episode_boundaries) for Memory
-
+        
         # Return
             A dict with keys window_length and ignore_episode_boundaries
         """
@@ -191,11 +207,10 @@ class Memory(object):
         }
         return config
 
-
 class SequentialMemory(Memory):
     def __init__(self, limit, **kwargs):
         super(SequentialMemory, self).__init__(**kwargs)
-
+        
         self.limit = limit
 
         # Do not use deque to implement the memory. This data structure may seem convenient but
@@ -207,6 +222,7 @@ class SequentialMemory(Memory):
 
     def sample(self, batch_size, batch_idxs=None):
         """Return a randomized batch of experiences
+
         # Argument
             batch_size (int): Size of the all batch
             batch_idxs (int): Indexes to extract
@@ -276,14 +292,15 @@ class SequentialMemory(Memory):
 
     def append(self, observation, action, reward, terminal, training=True):
         """Append an observation to the memory
+
         # Argument
             observation (dict): Observation returned by environment
             action (int): Action taken to obtain this observation
             reward (float): Reward obtained by taking this action
             terminal (boolean): Is the state terminal
-        """
+        """ 
         super(SequentialMemory, self).append(observation, action, reward, terminal, training=training)
-
+        
         # This needs to be understood as follows: in `observation`, take `action`, obtain `reward`
         # and weather the next state is `terminal` or not.
         if training:
@@ -295,6 +312,7 @@ class SequentialMemory(Memory):
     @property
     def nb_entries(self):
         """Return number of observations
+
         # Returns
             Number of observations
         """
@@ -302,9 +320,101 @@ class SequentialMemory(Memory):
 
     def get_config(self):
         """Return configurations of SequentialMemory
+
         # Returns
             Dict of config
         """
         config = super(SequentialMemory, self).get_config()
         config['limit'] = self.limit
         return config
+
+
+class EpisodicMemory(Memory):
+    def __init__(self, limit, **kwargs):
+        super(EpisodicMemory, self).__init__(**kwargs)
+
+        self.limit = limit
+        self.episodes = RingBuffer(limit)
+        self.terminal = False
+
+    def sample(self, batch_size, batch_idxs=None):
+        if len(self.episodes) <= 1:
+            # We don't have a complete episode yet ...
+            return []
+
+        if batch_idxs is None:
+            # Draw random indexes such that we never use the last episode yet, which is
+            # always incomplete by definition.
+            batch_idxs = sample_batch_indexes(0, self.nb_entries - 1, size=batch_size)
+        assert np.min(batch_idxs) >= 0
+        assert np.max(batch_idxs) < self.nb_entries
+        assert len(batch_idxs) == batch_size
+
+        # Create sequence of experiences.
+        sequences = []
+        for idx in batch_idxs:
+            episode = self.episodes[idx]
+            while len(episode) == 0:
+                idx = sample_batch_indexes(0, self.nb_entries, size=1)[0]
+
+            # Bootstrap state.
+            # no multiple observations along steps (memory.window_length)
+            self.window_length = 1
+            running_state = deque(maxlen=self.window_length)
+            for _ in range(self.window_length - 1):
+                running_state.append(np.zeros(episode[0].observation.shape))
+            assert len(running_state) == self.window_length - 1
+
+            states, rewards, actions, terminals = [], [], [], []
+            terminals.append(False)
+            for idx, timestep in enumerate(episode):
+                running_state.append(timestep.observation)
+                states.append(running_state.pop())
+                rewards.append(timestep.reward)
+                actions.append(timestep.action)
+                terminals.append(timestep.terminal)  # offset by 1, see `terminals.append(False)` above
+            assert len(states) == len(rewards)
+            assert len(states) == len(actions)
+            assert len(states) == len(terminals) - 1
+
+            # Transform into experiences (to be consistent).
+            sequence = []
+            for idx in range(len(episode) - 1):
+                state0 = states[idx]
+                state1 = states[idx + 1]
+                reward = rewards[idx]
+                action = actions[idx]
+                terminal1 = terminals[idx + 1]
+                experience = Experience(state0=state0, state1=state1, reward=reward, action=action, terminal1=terminal1)
+                sequence.append(experience)
+            sequences.append(sequence)
+            assert len(sequence) == len(episode) - 1
+        assert len(sequences) == batch_size
+        return sequences
+
+    def append(self, observation, action, reward, terminal, training=True):
+        super(EpisodicMemory, self).append(observation, action, reward, terminal, training=training)
+
+        # This needs to be understood as follows: in `observation`, take `action`, obtain `reward`
+        # and weather the next state is `terminal` or not.
+        if training:
+            timestep = EpisodicTimestep(observation=observation, action=action, reward=reward, terminal=terminal)
+            if len(self.episodes) == 0:
+                self.episodes.append([])  # first episode
+            self.episodes[-1].append(timestep)
+            if self.terminal:
+                self.episodes.append([])
+            self.terminal = terminal
+
+    @property
+    def nb_entries(self):
+        return len(self.episodes)
+
+    def get_config(self):
+        config = super(SequentialMemory, self).get_config()
+        config['limit'] = self.limit
+        return config
+
+    @property
+    def is_episodic(self):
+        return True
