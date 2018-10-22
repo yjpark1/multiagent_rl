@@ -107,3 +107,4 @@ venv.bak/
 *.xml
 *.xml
 .idea/vcs.xml
+*.npy
