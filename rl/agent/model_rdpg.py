@@ -8,7 +8,7 @@ from rl import arglist
 import copy
 from rl.utils import to_categorical
 
-arglist.batch_size = 32
+arglist.batch_size = 64
 GAMMA = 0.95
 TAU = 0.001
 
@@ -171,7 +171,7 @@ class Trainer:
             l2_reg = l2_reg + W.norm(2)
         # Loss: max. Q
         Q, _, _ = self.critic.forward(s0, pred_a0)
-        loss_actor = -1 * torch.sum(Q)
+        loss_actor = -1 * torch.mean(Q)
 
         # Sum. Loss
         loss_actor += entropy * 0.05

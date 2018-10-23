@@ -131,7 +131,7 @@ def run(cnt):
 
         # update all trainers, if not in display or benchmark mode
         loss = [np.nan, np.nan]
-        if (train_step > arglist.warmup_steps) and (train_step % 600 == 0):
+        if (train_step > arglist.warmup_steps) and (train_step % 100 == 0):
             # store hidden/cell state
             hState = agent.actor.hState
             # reset hidden/cell state
