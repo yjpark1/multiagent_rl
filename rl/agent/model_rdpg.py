@@ -8,7 +8,7 @@ from rl import arglist
 import copy
 from rl.utils import to_categorical
 
-arglist.batch_size = 128
+arglist.batch_size = 32
 GAMMA = 0.95
 TAU = 0.001
 
@@ -60,7 +60,8 @@ class Trainer:
 
     def process_obs(self, obs):
         obs = np.array(obs, dtype='float32')
-        obs = np.expand_dims(obs, axis=0)
+        obs = np.expand_dims(obs, axis=0)  # add dim. batch
+        obs = np.expand_dims(obs, axis=0)  # add dim. seq_len
         obs = torch.from_numpy(obs)
         return obs
 
@@ -79,23 +80,32 @@ class Trainer:
         done = torch.from_numpy(done)
         return done
 
+    def process_batch(self, experiences):
+        s0 = []
+        a0 = []
+        r = []
+        s1 = []
+        d = []
+        for e in experiences:
+            s0.append(torch.cat([step.state0 for step in e], dim=0))
+            a0.append(torch.stack([step.action for step in e], dim=0))
+            r.append(torch.stack([step.reward for step in e], dim=0))
+            s1.append(torch.cat([step.state1 for step in e], dim=0))
+            d.append(torch.stack([step.terminal1 for step in e], dim=0))
+
+        s0 = torch.cat(s0, dim=1)
+        a0 = torch.stack(a0, dim=1)
+        r = torch.stack(r, dim=1)
+        s1 = torch.cat(s1, dim=1)
+        d = torch.stack(d, dim=1)
+
+        return s0, a0, r, s1, d
+
     def to_onehot(self, a1):
         a1 = to_categorical(a1, num_classes=self.nb_actions)
         a1 = a1.astype('float32')
         a1 = torch.from_numpy(a1)
         return a1
-
-    def get_exploitation_action(self, state):
-        """
-        gets the action from target actor added with exploration noise
-        :param state: state (Numpy array)
-        :return: sampled action (Numpy array)
-        """
-        # state = torch.from_numpy(state).to(self.device)
-        action, _ = self.target_actor.forward(state)
-        action = action.detach()
-        # action = action.data.numpy().to(self.device)
-        return action
 
     def get_exploration_action(self, state):
         """
@@ -105,7 +115,8 @@ class Trainer:
         """
         # state = np.expand_dims(state, axis=0)
         state = state.to(self.device)
-        action, _ = self.actor.forward(state)
+        action, _, hcTime = self.actor.forward(state)
+        self.actor.hState = (hcTime[0].detach(), hcTime[1].detach())  # memorize hidden state
         action = action.detach()
         new_action = action.data.cpu().numpy()  # + (self.noise.sample() * self.action_lim)
         return new_action
@@ -115,55 +126,65 @@ class Trainer:
         Samples a random batch from replay memory and performs optimization
         :return:
         """
-        s1, a1, r1, s2, d = self.memory.sample(arglist.batch_size)
+        experiences = self.memory.sample(arglist.batch_size)
+        s0, a0, r, s1, d = self.process_batch(experiences)
 
+        s0 = s0.to(self.device)
+        a0 = a0.to(self.device)
+        r = r.to(self.device)
         s1 = s1.to(self.device)
-        a1 = a1.to(self.device)
-        r1 = r1.to(self.device)
-        s2 = s2.to(self.device)
         d = d.to(self.device)
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
-        a2, _ = self.target_actor.forward(s2)
-        a2 = a2.detach()
-        q_next, _ = self.target_critic.forward(s2, a2)
+        a1, _, _ = self.target_actor.forward(s1)
+        a1 = a1.detach()
+        q_next, _, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
-        # y_exp = r + gamma*Q'( s2, pi'(s2))
-        y_expected = r1 + GAMMA * q_next * (1. - d)
-        # y_pred = Q( s1, a1)
-        y_predicted, pred_r1 = self.critic.forward(s1, a1)
+        # Loss: TD error
+        # y_exp = r + gamma*Q'( s1, pi'(s1))
+        y_expected = r + GAMMA * q_next * (1. - d)
+        # y_pred = Q( s0, a0)
+        y_predicted, pred_r, _ = self.critic.forward(s0, a0)
         y_predicted = torch.squeeze(y_predicted)
-        pred_r1 = torch.squeeze(pred_r1)
+        pred_r = torch.squeeze(pred_r)
 
-        # compute critic loss, and update the critic
+        # Sum. Loss
         loss_critic = F.smooth_l1_loss(y_predicted, y_expected)
-        loss_critic += F.smooth_l1_loss(pred_r1, r1)
+        loss_critic += F.smooth_l1_loss(pred_r, r)
 
+        # Update critic
         self.critic_optimizer.zero_grad()
         loss_critic.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
         self.critic_optimizer.step()
 
         # ---------------------- optimize actor ----------------------
-        pred_a1, pred_s2 = self.actor.forward(s1)
-        entropy = torch.sum(pred_a1 * torch.log(pred_a1), dim=-1).mean()
+        pred_a0, pred_s1, _ = self.actor.forward(s0)
+
+        # Loss: entropy for exploration
+        entropy = torch.sum(pred_a0 * torch.log(pred_a0), dim=-1).mean()
+        # Loss: regularization
         l2_reg = torch.cuda.FloatTensor(1)
         for W in self.actor.parameters():
             l2_reg = l2_reg + W.norm(2)
-
-        Q, _ = self.critic.forward(s1, pred_a1)
+        # Loss: max. Q
+        Q, _, _ = self.critic.forward(s0, pred_a0)
         loss_actor = -1 * torch.sum(Q)
+
+        # Sum. Loss
         loss_actor += entropy * 0.05
         loss_actor += torch.squeeze(l2_reg) * 0.001
-        loss_actor += F.smooth_l1_loss(pred_s2, s2)
+        loss_actor += F.smooth_l1_loss(pred_s1, s1)
 
+        # Update actor
         self.actor_optimizer.zero_grad()
         loss_actor.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
         self.actor_optimizer.step()
 
+        # Update target model
         self.soft_update(self.target_actor, self.actor, arglist.tau)
         self.soft_update(self.target_critic, self.critic, arglist.tau)
 

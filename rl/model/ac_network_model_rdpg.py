@@ -34,8 +34,13 @@ class TimeDistributed(nn.Module):
 
         elif isinstance(self.module, nn.LSTM):
             # TimeDistributed + RNN
+            if h0 is not None:
+                h0, c0 = h0
+                h0 = h0.contiguous().view(h0.size()[0], b * n, h0.size()[-1])
+                c0 = c0.contiguous().view(c0.size()[0], b * n, c0.size()[-1])
+                h0 = (h0, c0)
+
             y, (h, c) = self.module(x_reshape, h0)
-            x_reshape.size()
             # shape: (seq_len, batch x agents, features)
             y = y.contiguous().view(seq_len, b, n, y.size()[-1])
             # shape: (seq_len, batch, agents, features)
@@ -64,7 +69,7 @@ class ActorNetwork(nn.Module):
     """
     MLP network (can be used as critic or actor)
     """
-    def __init__(self, input_dim, out_dim):
+    def __init__(self, nb_agents, input_dim, out_dim):
         """
         Inputs:
             agent_dim (int) : Number of dimensions for agents count
@@ -74,7 +79,7 @@ class ActorNetwork(nn.Module):
             nonlin (PyTorch function): Nonlinearity to apply to hidden layers
         """
         super(ActorNetwork, self).__init__()
-
+        self.nb_agents = nb_agents
         self.nonlin = F.relu
         self.dense1 = nn.Linear(input_dim, 64)
         self.lstmTime = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
@@ -82,6 +87,7 @@ class ActorNetwork(nn.Module):
         self.bilstmAgent = TimeDistributed(nn.LSTM(64, 32, num_layers=1, bidirectional=True))
         self.dense2 = nn.Linear(64, out_dim)
         self.dense3 = nn.Linear(64, input_dim)
+        self.hState = None
 
     def forward(self, obs):
         """
@@ -92,7 +98,7 @@ class ActorNetwork(nn.Module):
         """
         # obs: (time, batch, agent, feature)
         hid = F.relu(self.dense1(obs))
-        hid, hcTime = self.lstmTime(hid, h0=None)
+        hid, hcTime = self.lstmTime(hid, h0=self.hState)
         hid = hid.permute(2, 1, 0, 3)
         hid, hcAgent = self.bilstmAgent(hid, h0=None)
         hid = hid.permute(2, 1, 0, 3)
@@ -100,14 +106,20 @@ class ActorNetwork(nn.Module):
         policy = self.dense2(hid)
         policy = nn.Softmax(dim=-1)(policy)
         next_state = self.dense3(hid)
-        return policy, next_state
+        return policy, next_state, hcTime
+
+    def init_hidden(self, batch_size):
+        if self.lstmTime.module.bidirectional:
+            return torch.zeros(2, batch_size, self.nb_agents, 64, requires_grad=True)
+        else:
+            return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)
 
 
 class CriticNetwork(nn.Module):
     """
     MLP network (can be used as critic or actor)
     """
-    def __init__(self, input_dim, out_dim):
+    def __init__(self, nb_agents, input_dim, out_dim):
         """
         Inputs:
             agent_dim (int) : Number of dimensions for agents count
@@ -119,13 +131,15 @@ class CriticNetwork(nn.Module):
         """
         super(CriticNetwork, self).__init__()
 
+        self.nb_agents = nb_agents
         self.nonlin = F.relu
-        self.dense1 = TimeDistributed(nn.Linear(input_dim, 64))
-        self.lstmTime = nn.LSTM(64, 64, num_layers=1, bidirectional=False)
+        self.dense1 = nn.Linear(input_dim, 64)
+        self.lstmTime = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
-        self.lstmAgent = nn.LSTM(64, 64, num_layers=1, bidirectional=False)
+        self.lstmAgent = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
         self.dense2 = nn.Linear(64, out_dim)
         self.dense3 = nn.Linear(64, out_dim)
+        self.hState = None
 
     def forward(self, obs, action):
         """
@@ -137,21 +151,48 @@ class CriticNetwork(nn.Module):
         """
         obs_act = torch.cat((obs, action), dim=-1)
         hid = F.relu(self.dense1(obs_act))
-        hid, _ = self.lstmTime(hid, None)
-        hid, _ = self.lstmAgent(hid, None)
-        hid = F.relu(hid[:, -1, :])
+        hid, hcTime = self.lstmTime(hid, h0=self.hState)
+        hid, hcAgent = self.lstmAgent(hid, h0=None)
+        hid = F.relu(hid[:, :, -1, :])
         Q = self.dense2(hid)
         r = self.dense3(hid)
-        return Q, r
+        return Q, r, hcTime
+
+    def init_hidden(self, batch_size):
+        if self.lstmTime.module.bidirectional == True:
+            return torch.zeros(2, batch_size, self.nb_agents, 64, requires_grad=True)
+        else:
+            return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)
+
+'''
+hid = F.relu(self.dense1(obs))
+hid, hcTime = self.lstmTime(hid, h0=self.hState)
+hid = hid.permute(2, 1, 0, 3)
+hid, hcAgent = self.bilstmAgent(hid, h0=None)
+hid = hid.permute(2, 1, 0, 3)
+hid = F.relu(hid)
+policy = self.dense2(hid)
+policy = nn.Softmax(dim=-1)(policy)
+next_state = self.dense3(hid)
+'''
 
 if __name__ == '__main__':
     actor = ActorNetwork(input_dim=10, out_dim=5)
-    critic = CriticNetwork(input_dim=10, out_dim=1)
+    critic = CriticNetwork(input_dim=10 + 5, out_dim=1)
 
     s = torch.randn(15, 32, 3, 10)
     pred_actor = actor.forward(s)
-    pred_actor[0].size()
-    pred_actor[1].size()
+    print(pred_actor[0].size())
+    print(pred_actor[1].size())
+    print(actor.hState)
+    actor.hState = actor.init_hidden(batch_size=32)
+
+    h, c = pred_actor[2]
+    h.size()
+    c.size()
 
     a = torch.randn(15, 32, 3, 5)
     pred_critic = critic.forward(s, a)
+    print(critic.hState)
+    critic.hState = critic.init_hidden(batch_size=32)
+

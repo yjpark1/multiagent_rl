@@ -7,8 +7,9 @@ import torch
 import time
 from rl import arglist
 import pickle
-from rl.replay_buffer import MemoryBuffer
-# torch.set_default_tensor_type('torch.cuda.FloatTensor')
+from rl.replay_buffer import EpisodicMemory
+from copy import deepcopy
+torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 
 def observation(agent, world):
@@ -41,21 +42,17 @@ def run(cnt):
     env.discrete_action_input = True
     env.discrete_action_space = False
 
-    actor = ActorNetwork(input_dim=10, out_dim=5)
-    critic = CriticNetwork(input_dim=10 + 5, out_dim=1)
-    memory = MemoryBuffer(size=1000000)
+    actor = ActorNetwork(nb_agents=env.n, input_dim=10, out_dim=5)
+    critic = CriticNetwork(nb_agents=env.n, input_dim=10 + 5, out_dim=1)
+    memory = EpisodicMemory(limit=100000)
     agent = Trainer(actor, critic, memory)
 
-    # def run():
+    # initialize history
     episode_rewards = [0.0]  # sum of rewards for all agents
     agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
     final_ep_rewards = []  # sum of rewards for training curve
     final_ep_ag_rewards = []  # agent rewards for training curve
     terminal_reward = []
-
-    # history = []
-    # history_rewards = []
-    # episode_rewards = []  # sum of rewards for all agents
     episode_loss = []
     obs = env.reset()
     episode_step = 0
@@ -82,10 +79,13 @@ def run(cnt):
         terminal = (episode_step >= arglist.max_episode_len)
         terminal = agent.process_done(done or terminal)
         # collect experience
-        # obs, actions, rewards, new_obs, done
+        # obs, actions, rewards, done
         actions = agent.to_onehot(actions)
-        agent.memory.add(obs, actions, rewards, agent.process_obs(new_obs), terminal)
-        obs = new_obs
+        agent.memory.append(obs, actions, rewards, terminal, training=True)
+
+        # next observation
+        obs = deepcopy(new_obs)
+
         # episode_rewards.append(rewards)
         rewards = rewards.item()
         for i, rew in enumerate([rewards] * env.n):
@@ -99,22 +99,48 @@ def run(cnt):
                 env.render()
             # continue
 
+        # for save & print history
+        terminal_verbose = terminal
         if terminal:
+            # save terminal state
+            # process observation
+            obs = agent.process_obs(obs)
+            # get action & process action
+            actions = agent.get_exploration_action(obs)
+            actions = agent.process_action(actions)
+            actions = agent.to_onehot(actions)
+            # process rewards
+            rewards = agent.process_reward(0.)
+            rewards = rewards.mean().item()
+            # process terminal
+            terminal = agent.process_done(False)
+            agent.memory.append(obs, actions, rewards, terminal, training=True)
+
+            # reset environment
             obs = env.reset()
             episode_step = 0
             nb_episode += 1
             episode_rewards.append(0)
             terminal_reward.append(np.mean(rewards))
 
+            # initialize hidden/cell states
+            agent.actor.hState = None
+
         # increment global step counter
         train_step += 1
 
         # update all trainers, if not in display or benchmark mode
         loss = [np.nan, np.nan]
-        if (train_step > arglist.warmup_steps) and (train_step % 100 == 0):
+        if (train_step > arglist.warmup_steps) and (train_step % 600 == 0):
+            # store hidden/cell state
+            hState = agent.actor.hState
+            # reset hidden/cell state
+            agent.actor.hState = None
+            # optimize actor-critic
             loss = agent.optimize()
+            # recover hidden/cell state
+            agent.actor.hState = hState
             loss = [loss[0].data.item(), loss[1].data.item()]
-
         episode_loss.append(loss)
 
         if verbose_step:
@@ -123,7 +149,7 @@ def run(cnt):
             print('step: {}, actor_loss: {}, critic_loss: {}'.format(train_step, loss[0], loss[1]))
 
         elif verbose_episode:
-            if terminal and (len(episode_rewards) % arglist.save_rate == 0):
+            if terminal_verbose and (len(episode_rewards) % arglist.save_rate == 0):
                 print("steps: {}, episodes: {}, mean episode reward: {}, reward: {}, time: {}".format(
                     train_step, len(episode_rewards), round(np.mean(episode_rewards[-arglist.save_rate:]), 3),
                     round(np.mean(terminal_reward), 3), round(time.time() - t_start, 3)))
@@ -137,7 +163,6 @@ def run(cnt):
         # saves final episode reward for plotting training curve later
         if nb_episode > arglist.num_episodes:
             np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
-
             # rew_file_name = 'experiments/' + arglist.exp_name + '{}_rewards.pkl'.format(cnt)
             # with open(rew_file_name, 'wb') as fp:
             #     pickle.dump(final_ep_rewards, fp)
@@ -145,7 +170,6 @@ def run(cnt):
             # with open(agrew_file_name, 'wb') as fp:
             #     pickle.dump(final_ep_ag_rewards, fp)
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
-
             break
 
     # np.save('history_rewards_{}.npy'.format(cnt), history_rewards)
@@ -155,7 +179,7 @@ def run(cnt):
 if __name__ == '__main__':
     for cnt in range(10):
         torch.cuda.empty_cache()
-        torch.set_default_tensor_type('torch.FloatTensor')
+        # torch.set_default_tensor_type('torch.FloatTensor')
         run(cnt)
 
 ##############################
