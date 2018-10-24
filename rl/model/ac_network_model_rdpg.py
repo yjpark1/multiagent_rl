@@ -102,8 +102,8 @@ class ActorNetwork(nn.Module):
         hid = F.relu(hid)
         hid = hid.permute(2, 1, 0, 3)
         hid, hcAgent = self.bilstmAgent(hid, h0=None)
-        hid = hid.permute(2, 1, 0, 3)
         hid = F.relu(hid)
+        hid = hid.permute(2, 1, 0, 3)
         policy = self.dense2(hid)
         policy = nn.Softmax(dim=-1)(policy)
         next_state = self.dense3(hid)
@@ -161,7 +161,7 @@ class CriticNetwork(nn.Module):
         return Q, r, hcTime
 
     def init_hidden(self, batch_size):
-        if self.lstmTime.module.bidirectional == True:
+        if self.lstmTime.module.bidirectional:
             return torch.zeros(2, batch_size, self.nb_agents, 64, requires_grad=True)
         else:
             return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)

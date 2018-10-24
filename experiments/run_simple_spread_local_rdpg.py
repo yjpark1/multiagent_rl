@@ -44,7 +44,7 @@ def run(cnt):
 
     actor = ActorNetwork(nb_agents=env.n, input_dim=10, out_dim=5)
     critic = CriticNetwork(nb_agents=env.n, input_dim=10 + 5, out_dim=1)
-    memory = EpisodicMemory(limit=100000)
+    memory = EpisodicMemory(limit=1000000)
     agent = Trainer(actor, critic, memory)
 
     # initialize history
