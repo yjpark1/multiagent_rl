@@ -109,3 +109,4 @@ venv.bak/
 .idea/vcs.xml
 *.npy
 *.txt
+experiments/results/train_log.txt
