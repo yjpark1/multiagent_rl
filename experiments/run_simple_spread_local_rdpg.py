@@ -131,7 +131,7 @@ def run(cnt):
 
         # update all trainers, if not in display or benchmark mode
         loss = [np.nan, np.nan]
-        if (train_step > arglist.warmup_steps) and (train_step % 100 == 0):
+        if (train_step > arglist.warmup_steps) and (train_step % 600 == 0):
             # store hidden/cell state
             hState = agent.actor.hState
             # reset hidden/cell state
@@ -162,7 +162,7 @@ def run(cnt):
 
         # saves final episode reward for plotting training curve later
         if nb_episode > arglist.num_episodes:
-            np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
+            np.save('results/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
             # rew_file_name = 'experiments/' + arglist.exp_name + '{}_rewards.pkl'.format(cnt)
             # with open(rew_file_name, 'wb') as fp:
             #     pickle.dump(final_ep_rewards, fp)

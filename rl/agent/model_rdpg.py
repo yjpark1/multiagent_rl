@@ -8,7 +8,7 @@ from rl import arglist
 import copy
 from rl.utils import to_categorical
 
-arglist.batch_size = 64
+arglist.batch_size = 32
 GAMMA = 0.95
 TAU = 0.001
 
@@ -151,8 +151,8 @@ class Trainer:
         pred_r = torch.squeeze(pred_r)
 
         # Sum. Loss
-        loss_critic = F.smooth_l1_loss(y_predicted, y_expected)
-        loss_critic += F.smooth_l1_loss(pred_r, r)
+        loss_critic = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
+        loss_critic += torch.nn.L1Loss()(pred_r, r)
 
         # Update critic
         self.critic_optimizer.zero_grad()
@@ -171,12 +171,12 @@ class Trainer:
             l2_reg = l2_reg + W.norm(2)
         # Loss: max. Q
         Q, _, _ = self.critic.forward(s0, pred_a0)
-        loss_actor = -1 * torch.mean(Q)
+        loss_actor = -1 * Q.sum() / arglist.batch_size
 
         # Sum. Loss
         loss_actor += entropy * 0.05
         loss_actor += torch.squeeze(l2_reg) * 0.001
-        loss_actor += F.smooth_l1_loss(pred_s1, s1)
+        loss_actor += torch.nn.L1Loss()(pred_s1, s1)
 
         # Update actor
         self.actor_optimizer.zero_grad()
