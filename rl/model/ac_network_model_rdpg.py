@@ -166,17 +166,6 @@ class CriticNetwork(nn.Module):
         else:
             return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)
 
-'''
-hid = F.relu(self.dense1(obs))
-hid, hcTime = self.lstmTime(hid, h0=self.hState)
-hid = hid.permute(2, 1, 0, 3)
-hid, hcAgent = self.bilstmAgent(hid, h0=None)
-hid = hid.permute(2, 1, 0, 3)
-hid = F.relu(hid)
-policy = self.dense2(hid)
-policy = nn.Softmax(dim=-1)(policy)
-next_state = self.dense3(hid)
-'''
 
 if __name__ == '__main__':
     actor = ActorNetwork(input_dim=10, out_dim=5)
