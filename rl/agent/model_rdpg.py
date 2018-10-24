@@ -151,7 +151,7 @@ class Trainer:
 
         # Sum. Loss
         critic_TDLoss = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
-        critic_ModelLoss = 0.1 * torch.nn.L1Loss()(pred_r, r)
+        critic_ModelLoss = torch.nn.L1Loss()(pred_r, r)
         loss_critic = critic_TDLoss
         loss_critic += critic_ModelLoss
 
@@ -175,7 +175,7 @@ class Trainer:
         actor_maxQ = -1 * Q.mean()
 
         # Loss: model loss
-        actor_ModelLoss = torch.nn.L1Loss()(pred_s1, s1) * 0.1
+        actor_ModelLoss = torch.nn.L1Loss()(pred_s1, s1)
 
         # Sum. Loss
         loss_actor = actor_maxQ
