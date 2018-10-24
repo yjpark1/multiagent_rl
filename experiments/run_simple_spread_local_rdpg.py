@@ -63,6 +63,10 @@ def run(cnt):
     verbose_episode = True
     t_start = time.time()
 
+    log = open('results/train_log.txt', 'w')
+    log.write('train start... \n')
+    log.close()
+
     print('Starting iterations...')
     while True:
         # get action
@@ -141,8 +145,8 @@ def run(cnt):
             loss = agent.optimize()
             # recover hidden/cell state
             agent.actor.hState = hState
-            loss = [loss[0].data.item(), loss[1].data.item()]
-        episode_loss.append(loss)
+            loss = np.array([x.data.item() for x in loss])
+            episode_loss.append(loss)
 
         if verbose_step:
             if loss == [np.nan, np.nan]:
@@ -151,9 +155,25 @@ def run(cnt):
 
         elif verbose_episode:
             if terminal_verbose and (len(episode_rewards) % arglist.save_rate == 0):
-                print("steps: {}, episodes: {}, mean episode reward: {}, reward: {}, time: {}".format(
+                monitor_loss = np.mean(np.array(episode_loss)[-1000:], axis=0)
+
+                msg1 = "steps: {}, episodes: {}, mean episode reward: {}, reward: {}, time: {}".format(
                     train_step, len(episode_rewards), round(np.mean(episode_rewards[-arglist.save_rate:]), 3),
-                    round(np.mean(terminal_reward), 3), round(time.time() - t_start, 3)))
+                    round(np.mean(terminal_reward), 3), round(time.time() - t_start, 3))
+
+                msg2 = "TD error: {}, c_model: {}, actorQ: {}, a_model: {}".format(
+                    round(monitor_loss[2], 3),
+                    round(monitor_loss[3], 3),
+                    round(monitor_loss[4], 3),
+                    round(monitor_loss[5], 3))
+                msg = msg1 + ', ' + msg2
+                print(msg)
+
+                # save log
+                log = open('results/train_log.txt', 'a')
+                log.write(msg + '\n')
+                log.close()
+
                 terminal_reward = []
                 t_start = time.time()
                 # Keep track of final episode reward

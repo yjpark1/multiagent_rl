@@ -150,8 +150,10 @@ class Trainer:
         pred_r = torch.squeeze(pred_r)
 
         # Sum. Loss
-        loss_critic = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
-        loss_critic += 0.1*torch.nn.L1Loss()(pred_r, r)
+        critic_TDLoss = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
+        critic_ModelLoss = 0.1 * torch.nn.L1Loss()(pred_r, r)
+        loss_critic = critic_TDLoss
+        loss_critic += critic_ModelLoss
 
         # Update critic
         self.critic_optimizer.zero_grad()
@@ -170,12 +172,16 @@ class Trainer:
             l2_reg = l2_reg + W.norm(2)
         # Loss: max. Q
         Q, _, _ = self.critic.forward(s0, pred_a0)
-        loss_actor = -1 * Q.mean()
+        actor_maxQ = -1 * Q.mean()
+
+        # Loss: model loss
+        actor_ModelLoss = torch.nn.L1Loss()(pred_s1, s1) * 0.1
 
         # Sum. Loss
+        loss_actor = actor_maxQ
         loss_actor += entropy * 0.05
         loss_actor += torch.squeeze(l2_reg) * 0.001
-        loss_actor += torch.nn.L1Loss()(pred_s1, s1) * 0.1
+        loss_actor += actor_ModelLoss
 
         # Update actor
         self.actor_optimizer.zero_grad()
@@ -187,7 +193,7 @@ class Trainer:
         self.soft_update(self.target_actor, self.actor, arglist.tau)
         self.soft_update(self.target_critic, self.critic, arglist.tau)
 
-        return loss_actor, loss_critic
+        return loss_actor, loss_critic, critic_TDLoss, critic_ModelLoss, actor_maxQ, actor_ModelLoss
 
     def save_models(self, episode_count):
         """
