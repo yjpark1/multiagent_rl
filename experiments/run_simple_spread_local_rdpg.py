@@ -102,6 +102,8 @@ def run(cnt):
         # for save & print history
         terminal_verbose = terminal
         if terminal:
+            terminal_reward.append(np.mean(rewards))
+
             # save terminal state
             # process observation
             obs = agent.process_obs(obs)
@@ -121,7 +123,6 @@ def run(cnt):
             episode_step = 0
             nb_episode += 1
             episode_rewards.append(0)
-            terminal_reward.append(np.mean(rewards))
 
             # initialize hidden/cell states
             agent.actor.hState = None
