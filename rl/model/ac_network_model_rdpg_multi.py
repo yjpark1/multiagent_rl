@@ -81,12 +81,12 @@ class ActorNetwork(nn.Module):
         super(ActorNetwork, self).__init__()
         self.nb_agents = nb_agents
         self.nonlin = F.relu
-        self.dense1 = nn.Linear(input_dim, 64)
-        self.lstmTime = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
+        self.dense1 = nn.Linear(input_dim, 128)
+        self.lstmTime = TimeDistributed(nn.LSTM(128, 128, num_layers=1, bidirectional=False))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
-        self.bilstmAgent = TimeDistributed(nn.LSTM(64, 32, num_layers=1, bidirectional=True))
-        self.dense2 = nn.Linear(64, out_dim)
-        self.dense3 = nn.Linear(64, input_dim)
+        self.bilstmAgent = TimeDistributed(nn.LSTM(128, 64, num_layers=1, bidirectional=True))
+        self.dense2 = nn.Linear(128, out_dim)
+        self.dense3 = nn.Linear(128, input_dim)
         self.hState = None
 
     def forward(self, obs):
@@ -111,9 +111,9 @@ class ActorNetwork(nn.Module):
 
     def init_hidden(self, batch_size):
         if self.lstmTime.module.bidirectional:
-            return torch.zeros(2, batch_size, self.nb_agents, 64, requires_grad=True)
+            return torch.zeros(2, batch_size, self.nb_agents, 128, requires_grad=True)
         else:
-            return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)
+            return torch.zeros(1, batch_size, self.nb_agents, 128, requires_grad=True)
 
 
 class CriticNetwork(nn.Module):
@@ -134,12 +134,12 @@ class CriticNetwork(nn.Module):
 
         self.nb_agents = nb_agents
         self.nonlin = F.relu
-        self.dense1 = nn.Linear(input_dim, 64)
-        self.lstmTime = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
+        self.dense1 = nn.Linear(input_dim, 128)
+        self.lstmTime = TimeDistributed(nn.LSTM(128, 128, num_layers=1, bidirectional=False))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
-        self.lstmAgent = TimeDistributed(nn.LSTM(64, 64, num_layers=1, bidirectional=False))
-        self.dense2 = nn.Linear(64, out_dim)
-        self.dense3 = nn.Linear(64, out_dim)
+        self.lstmAgent = TimeDistributed(nn.LSTM(128, 128, num_layers=1, bidirectional=False))
+        self.dense2 = nn.Linear(128, out_dim)
+        self.dense3 = nn.Linear(128, out_dim)
         self.hState = None
 
     def forward(self, obs, action):
@@ -162,28 +162,28 @@ class CriticNetwork(nn.Module):
 
     def init_hidden(self, batch_size):
         if self.lstmTime.module.bidirectional:
-            return torch.zeros(2, batch_size, self.nb_agents, 64, requires_grad=True)
+            return torch.zeros(2, batch_size, self.nb_agents, 128, requires_grad=True)
         else:
-            return torch.zeros(1, batch_size, self.nb_agents, 64, requires_grad=True)
+            return torch.zeros(1, batch_size, self.nb_agents, 128, requires_grad=True)
 
 
 if __name__ == '__main__':
     actor = ActorNetwork(input_dim=10, out_dim=5)
     critic = CriticNetwork(input_dim=10 + 5, out_dim=1)
 
-    s = torch.randn(15, 32, 3, 10)
+    s = torch.randn(15, 128, 3, 10)
     pred_actor = actor.forward(s)
     print(pred_actor[0].size())
     print(pred_actor[1].size())
     print(actor.hState)
-    actor.hState = actor.init_hidden(batch_size=32)
+    actor.hState = actor.init_hidden(batch_size=128)
 
     h, c = pred_actor[2]
     h.size()
     c.size()
 
-    a = torch.randn(15, 32, 3, 5)
+    a = torch.randn(15, 128, 3, 5)
     pred_critic = critic.forward(s, a)
     print(critic.hState)
-    critic.hState = critic.init_hidden(batch_size=32)
+    critic.hState = critic.init_hidden(batch_size=128)
 

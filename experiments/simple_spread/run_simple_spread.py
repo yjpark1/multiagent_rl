@@ -1,35 +1,19 @@
 from multiagent.environment import MultiAgentEnv
 import multiagent.scenarios as scenarios
-from rl.model.ac_network_model import ActorNetwork, CriticNetwork
-from rl.agent.model_ddpg import Trainer
+from rl.model.ac_network_multi import ActorNetwork, CriticNetwork
+from rl.agent.ddpg import Trainer
 import numpy as np
 import torch
 import time
 from rl import arglist
 import pickle
-from rl.replay_buffer import MemoryBuffer
+from rl.replay_buffer import SequentialMemory, MemoryBuffer
 # torch.set_default_tensor_type('torch.cuda.FloatTensor')
-
-
-def observation(agent, world):
-    # get positions of all entities in this agent's reference frame
-    entity_pos = []
-    for entity in world.landmarks:  # world.entities:
-        entity_pos.append(entity.state.p_pos - agent.state.p_pos)
-    # entity colors
-    entity_color = []
-    for entity in world.landmarks:  # world.entities:
-        entity_color.append(entity.color)
-
-    return np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + entity_pos)
-
 
 def run(cnt):
     # load scenario from script
     scenario_name = 'simple_spread'
     scenario = scenarios.load(scenario_name + ".py").Scenario()
-    # change to local observation
-    scenario.observation = observation
 
     # create world
     world = scenario.make_world()
@@ -41,8 +25,8 @@ def run(cnt):
     env.discrete_action_input = True
     env.discrete_action_space = False
 
-    actor = ActorNetwork(input_dim=10, out_dim=5)
-    critic = CriticNetwork(input_dim=10 + 5, out_dim=1)
+    actor = ActorNetwork(input_dim=18, out_dim=5)
+    critic = CriticNetwork(input_dim=18 + 5, out_dim=1)
     memory = MemoryBuffer(size=1000000)
     agent = Trainer(actor, critic, memory)
 
@@ -138,12 +122,12 @@ def run(cnt):
         if nb_episode > arglist.num_episodes:
             np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
 
-            # rew_file_name = 'experiments/' + arglist.exp_name + '{}_rewards.pkl'.format(cnt)
-            # with open(rew_file_name, 'wb') as fp:
-            #     pickle.dump(final_ep_rewards, fp)
-            # agrew_file_name = 'experiments/' + arglist.exp_name + '{}_agrewards.pkl'.format(cnt)
-            # with open(agrew_file_name, 'wb') as fp:
-            #     pickle.dump(final_ep_ag_rewards, fp)
+            rew_file_name = 'experiments/' + arglist.exp_name + '{}_rewards.pkl'.format(cnt)
+            with open(rew_file_name, 'wb') as fp:
+                pickle.dump(final_ep_rewards, fp)
+            agrew_file_name = 'experiments/' + arglist.exp_name + '{}_agrewards.pkl'.format(cnt)
+            with open(agrew_file_name, 'wb') as fp:
+                pickle.dump(final_ep_ag_rewards, fp)
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
 
             break
