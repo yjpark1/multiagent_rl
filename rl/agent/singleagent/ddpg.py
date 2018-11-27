@@ -66,7 +66,10 @@ class Trainer:
 
     def process_action(self, actions):
         # actions = np.argmax(actions, axis=-1)
-        actions = np.random.choice(self.nb_actions, p=actions[0], replace=False)
+        try:
+            actions = np.random.choice(self.nb_actions, p=actions[0], replace=False)
+        except ValueError:
+            actions = np.argmax(actions[0], axis=-1)
         return actions
 
     def process_reward(self, rewards):
@@ -141,7 +144,7 @@ class Trainer:
         pred_a0 = self.actor.forward(s0)
 
         # Loss: entropy for exploration
-        entropy = torch.sum(pred_a0 * torch.log(pred_a0), dim=-1)
+        entropy = torch.sum(pred_a0 * torch.log(pred_a0 + 1e-10), dim=-1)
         entropy = entropy.mean()
 
         # Loss: regularization

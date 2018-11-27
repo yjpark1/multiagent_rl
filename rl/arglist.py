@@ -1,6 +1,6 @@
 max_episode_len = 25
 display = False
-num_episodes = 60000
+num_episodes = 10000
 learning_rate = 1e-4
 tau = 0.001
 warmup_steps = 1000

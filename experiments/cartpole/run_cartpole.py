@@ -98,7 +98,7 @@ def run(cnt):
         elif verbose_episode:
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
                 print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-                    train_step, len(episode_rewards), round(np.mean(episode_rewards[-arglist.save_rate:]), 3),
+                    train_step, len(episode_rewards), 10 * round(np.mean(episode_rewards[-arglist.save_rate:]), 3),
                     round(time.time() - t_start, 3)))
                 t_start = time.time()
                 # Keep track of final episode reward
@@ -106,7 +106,7 @@ def run(cnt):
 
         # saves final episode reward for plotting training curve later
         if nb_episode > arglist.num_episodes:
-            np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
+            np.save('experiments/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards * 10)
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             break
 
