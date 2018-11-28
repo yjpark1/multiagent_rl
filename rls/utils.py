@@ -32,7 +32,7 @@ def to_categorical(y, num_classes=None):
     categorical = np.reshape(categorical, output_shape)
     return categorical
 
-# TODO: fix gumbel softmax for multi-agent rl
+# TODO: fix gumbel softmax for multi-agent rls
 def onehot_from_logits(logits, eps=0.0):
     """
     Given batch of logits, return one-hot sample using epsilon greedy strategy

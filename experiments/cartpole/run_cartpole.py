@@ -3,10 +3,10 @@ import numpy as np
 import torch
 import time
 
-from rl.model.ac_network_single import ActorNetwork, CriticNetwork
-from rl.agent.singleagent.ddpg import Trainer
-from rl import arglist
-from rl.replay_buffer import MemoryBuffer
+from rls.model.ac_network_single import ActorNetwork, CriticNetwork
+from rls.agent.singleagent.ddpg import Trainer
+from rls import arglist
+from rls.replay_buffer import MemoryBuffer
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
@@ -48,19 +48,19 @@ def run(cnt):
     while True:
         # get action
         obs = agent.process_obs(obs)
-        actions = agent.get_exploration_action(obs)
+        actions, policy = agent.get_exploration_action(obs)
         actions = agent.process_action(actions)
 
         # environment step
         new_obs, rewards, done, info = env.step(actions)
-        rewards = agent.process_reward(rewards) * 0.1
+        rewards = agent.process_reward(rewards) * arglist.reward_factor
         episode_step += 1
         terminal = False
         terminal = agent.process_done(done or terminal)
         # collect experience
         # obs, actions, rewards, new_obs, done
-        actions = agent.to_onehot(actions)
-        agent.memory.add(obs, actions, rewards, agent.process_obs(new_obs), terminal)
+        # actions = agent.to_onehot(actions)
+        agent.memory.add(obs, policy, rewards, agent.process_obs(new_obs), terminal)
         obs = new_obs
         # episode_rewards.append(rewards)
         rewards = rewards.item()
@@ -84,7 +84,7 @@ def run(cnt):
 
         # update all trainers, if not in display or benchmark mode
         loss = [np.nan, np.nan]
-        if (train_step > arglist.warmup_steps) and (train_step % 2 == 0):
+        if (train_step > arglist.warmup_steps) and (train_step % 1 == 0):
             loss = agent.optimize()
             loss = [loss[0].data.item(), loss[1].data.item()]
 
@@ -98,7 +98,7 @@ def run(cnt):
         elif verbose_episode:
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
                 print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
-                    train_step, len(episode_rewards), round(10 * np.mean(episode_rewards[-arglist.save_rate:]), 3),
+                    train_step, len(episode_rewards), round((1/arglist.reward_factor) * np.mean(episode_rewards[-arglist.save_rate:]), 3),
                     round(time.time() - t_start, 3)))
                 t_start = time.time()
                 # Keep track of final episode reward
@@ -106,7 +106,7 @@ def run(cnt):
 
         # saves final episode reward for plotting training curve later
         if nb_episode > arglist.num_episodes:
-            np.save('experiments/cartpole/results/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards * 10)
+            np.save('cartpole/results/iter_{}_episode_rewards.npy'.format(cnt), episode_rewards)
             print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             break
 

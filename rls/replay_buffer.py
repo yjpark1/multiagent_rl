@@ -21,11 +21,6 @@ class MemoryBuffer:
         batch = []
         count = min(batch_size, self.len)
         batch = random.sample(self.buffer, count)
-        # s_arr = np.float32([arr[0] for arr in batch])
-        # a_arr = np.float32([arr[1] for arr in batch])
-        # r_arr = np.float32([arr[2] for arr in batch])
-        # s1_arr = np.float32([arr[3] for arr in batch])
-        # d_arr = np.float32([arr[4] for arr in batch])
         s_arr = torch.cat([arr[0] for arr in batch])
         a_arr = torch.stack([arr[1] for arr in batch])
         r_arr = torch.stack([arr[2] for arr in batch])

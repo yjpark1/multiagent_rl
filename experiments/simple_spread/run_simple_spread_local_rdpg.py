@@ -1,13 +1,13 @@
 from multiagent.environment import MultiAgentEnv
 import multiagent.scenarios as scenarios
-from rl.model.ac_network_model_rdpg_multi import ActorNetwork, CriticNetwork
-from rl.agent.model_rdpg import Trainer
+from rls.model.ac_network_model_rdpg_multi import ActorNetwork, CriticNetwork
+from rls.agent.model_rdpg import Trainer
 import numpy as np
 import torch
 import time
-from rl import arglist
+from rls import arglist
 import pickle
-from rl.replay_buffer import EpisodicMemory
+from rls.replay_buffer import EpisodicMemory
 from copy import deepcopy
 torch.set_default_tensor_type('torch.cuda.FloatTensor')
 

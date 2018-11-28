@@ -1,13 +1,13 @@
 from multiagent.environment import MultiAgentEnv
 import multiagent.scenarios as scenarios
-from rl.model.ac_network_multi import ActorNetwork, CriticNetwork
-from rl.agent.ddpg import Trainer
+from rls.model.ac_network_multi import ActorNetwork, CriticNetwork
+from rls.agent.ddpg import Trainer
 import numpy as np
 import torch
 import time
-from rl import arglist
+from rls import arglist
 import pickle
-from rl.replay_buffer import SequentialMemory, MemoryBuffer
+from rls.replay_buffer import SequentialMemory, MemoryBuffer
 # torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 def run(cnt):

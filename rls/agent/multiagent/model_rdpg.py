@@ -4,9 +4,9 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 import shutil
-from rl import arglist
+from rls import arglist
 import copy
-from rl.utils import to_categorical
+from rls.utils import to_categorical
 
 GAMMA = 0.95
 TAU = 0.001
