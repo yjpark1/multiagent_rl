@@ -10,3 +10,13 @@ save_rate = 100
 batch_size = 128
 reward_factor = 1
 exp_name = 'model_'
+is_training = True
+update_rate = 100
+
+# actions
+# 0: nothing
+# 1: left
+# 2: right
+# 3: down
+# 4: up
+

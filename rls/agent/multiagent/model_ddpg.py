@@ -1,14 +1,12 @@
 # reference: https://github.com/vy007vikas/PyTorch-ActorCriticRL/blob/master/train.py
 from __future__ import division
 import torch
-import torch.nn.functional as F
 import numpy as np
 import shutil
 from rls import arglist
 import copy
 from rls.utils import to_categorical
 
-arglist.batch_size = 128
 GAMMA = 0.95
 TAU = 0.001
 
@@ -23,11 +21,11 @@ class Trainer:
         self.iter = 0
         self.actor = actor.to(self.device)
         self.target_actor = copy.deepcopy(actor).to(self.device)
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), arglist.learning_rate)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), arglist.actor_learning_rate)
 
         self.critic = critic.to(self.device)
         self.target_critic = copy.deepcopy(critic).to(self.device)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), arglist.learning_rate)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), arglist.critic_learning_rate)
 
         self.memory = memory
         self.nb_actions = 5
@@ -65,37 +63,26 @@ class Trainer:
         return obs
 
     def process_action(self, actions):
-        actions = np.argmax(actions, axis=-1)
-        actions = actions.reshape(-1)
+        actions = torch.from_numpy(actions)
         return actions
 
     def process_reward(self, rewards):
         rewards = np.array(rewards, dtype='float32')
+        rewards = np.sum(rewards)
         rewards = torch.from_numpy(rewards)
         return rewards
 
     def process_done(self, done):
+        done = np.all(done)
         done = np.array(done, dtype='float32')
         done = torch.from_numpy(done)
         return done
 
-    def to_onehot(self, a1):
-        a1 = to_categorical(a1, num_classes=self.nb_actions)
-        a1 = a1.astype('float32')
-        a1 = torch.from_numpy(a1)
-        return a1
-
-    def get_exploitation_action(self, state):
-        """
-        gets the action from target actor added with exploration noise
-        :param state: state (Numpy array)
-        :return: sampled action (Numpy array)
-        """
-        # state = torch.from_numpy(state).to(self.device)
-        action, _ = self.target_actor.forward(state)
-        action = action.detach()
-        # action = action.data.numpy().to(self.device)
-        return action
+    def to_onehot(self, actions):
+        actions = np.argmax(actions, axis=-1)
+        actions = to_categorical(actions, num_classes=3)
+        actions = actions.astype('float32')
+        return actions
 
     def get_exploration_action(self, state):
         """
@@ -105,65 +92,96 @@ class Trainer:
         """
         # state = np.expand_dims(state, axis=0)
         state = state.to(self.device)
-        action, _ = self.actor.forward(state)
-        action = action.detach()
-        new_action = action.data.cpu().numpy()  # + (self.noise.sample() * self.action_lim)
-        return new_action
+        actions, _ = self.actor.forward(state)
+        actions = actions.data.cpu().numpy()
+        # OU process: (-1, 1) scale
+        actions[:, :, 0:2] = actions[:, :, 0:2] + self.noise.noise()
+        actions[:, :, 2:] = self.to_onehot(actions[:, :, 2:])
+        return actions
+
+    def process_batch(self, experiences):
+        s0 = torch.cat([e.state0[0] for e in experiences], dim=0)
+        a0 = torch.cat([e.action for e in experiences], dim=0)
+        r = torch.stack([e.reward for e in experiences], dim=0)
+        s1 = torch.cat([e.state1[0] for e in experiences], dim=0)
+        d = torch.stack([e.terminal1 for e in experiences], dim=0)
+
+        return s0, a0, r, s1, d
 
     def optimize(self):
         """
         Samples a random batch from replay memory and performs optimization
         :return:
         """
-        s1, a1, r1, s2, d = self.memory.sample(arglist.batch_size)
+        experiences = self.memory.sample(arglist.batch_size)
+        s0, a0, r, s1, d = self.process_batch(experiences)
 
+        s0 = s0.to(self.device)
+        a0 = a0.to(self.device)
+        r = r.to(self.device)
         s1 = s1.to(self.device)
-        a1 = a1.to(self.device)
-        r1 = r1.to(self.device)
-        s2 = s2.to(self.device)
         d = d.to(self.device)
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
-        a2, _ = self.target_actor.forward(s2)
-        a2 = a2.detach()
-        q_next, _ = self.target_critic.forward(s2, a2)
+        a1, _ = self.target_actor.forward(s1)
+        a1 = a1.detach()
+        q_next, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
-        # y_exp = r + gamma*Q'( s2, pi'(s2))
-        y_expected = r1 + GAMMA * q_next * (1. - d)
-        # y_pred = Q( s1, a1)
-        y_predicted, pred_r1 = self.critic.forward(s1, a1)
+        # Loss: TD error
+        # y_exp = r + gamma*Q'( s1, pi'(s1))
+        y_expected = r + GAMMA * q_next * (1. - d)
+        # y_pred = Q( s0, a0)
+        y_predicted, pred_r = self.critic.forward(s0, a0)
         y_predicted = torch.squeeze(y_predicted)
-        pred_r1 = torch.squeeze(pred_r1)
+        pred_r = torch.squeeze(pred_r)
 
-        # compute critic loss, and update the critic
-        loss_critic = F.smooth_l1_loss(y_predicted, y_expected)
-        loss_critic += F.smooth_l1_loss(pred_r1, r1)
+        # Sum. Loss
+        critic_TDLoss = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
+        critic_ModelLoss = torch.nn.L1Loss()(pred_r, r)
+        loss_critic = critic_TDLoss
+        loss_critic += critic_ModelLoss
 
+        # Update critic
         self.critic_optimizer.zero_grad()
         loss_critic.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
         self.critic_optimizer.step()
 
         # ---------------------- optimize actor ----------------------
-        pred_a1, pred_s2 = self.actor.forward(s1)
-        entropy = torch.sum(pred_a1 * torch.log(pred_a1), dim=-1).mean()
+        pred_a0, pred_s1 = self.actor.forward(s0)
+
+        # Loss: entropy for exploration
+        entropy = torch.sum(pred_a0 * torch.log(pred_a0), dim=-1).mean()
+
+        # Loss: regularization
         l2_reg = torch.cuda.FloatTensor(1)
         for W in self.actor.parameters():
             l2_reg = l2_reg + W.norm(2)
 
-        Q, _ = self.critic.forward(s1, pred_a1)
-        loss_actor = -1 * torch.sum(Q)
-        loss_actor += entropy * 0.05
-        loss_actor += torch.squeeze(l2_reg) * 0.001
-        loss_actor += F.smooth_l1_loss(pred_s2, s2)
+        # Loss: max. Q
+        Q, _ = self.critic.forward(s0, pred_a0)
+        actor_maxQ = -1 * Q.mean()
 
+        # Loss: env loss
+        actor_ModelLoss = torch.nn.L1Loss()(pred_s1, s1)
+
+        # Sum. Loss
+        loss_actor = actor_maxQ
+        loss_actor += entropy * 0.05  # <replace Gaussian noise>
+        loss_actor += torch.squeeze(l2_reg) * 0.001
+        loss_actor += actor_ModelLoss
+
+        # Update actor
+        # run random noise to exploration
+        self.actor.train()
         self.actor_optimizer.zero_grad()
         loss_actor.backward()
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
         self.actor_optimizer.step()
 
+        # Update target env
         self.soft_update(self.target_actor, self.actor, arglist.tau)
         self.soft_update(self.target_critic, self.critic, arglist.tau)
 
