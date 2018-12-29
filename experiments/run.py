@@ -11,7 +11,7 @@ from rls.agent.multiagent.model_ddpg import Trainer
 from experiments.scenarios import make_env
 
 
-def run(env, actor, critic, Trainer, cnt=0):
+def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
     """function of learning agent
     """    
     torch.set_default_tensor_type('torch.FloatTensor')
@@ -53,7 +53,7 @@ def run(env, actor, critic, Trainer, cnt=0):
         episode_steps +=1
 
         # <get terminal condition>
-        terminal = episode_steps >= arglist.max_episode_len
+        terminal = (episode_steps >= arglist.max_episode_len) or done
 
         # <insert single step (s, a, r, t) into replay memory>
         actions = learner.process_action(actions)
@@ -106,13 +106,13 @@ def run(env, actor, critic, Trainer, cnt=0):
         # <terminate learning: steps or episodes>
         if nb_steps > arglist.max_nb_steps:
             print('...Finished total of {} episodes and {} steps'.format(nb_episodes, nb_steps))
-            learner.save_models('fin' + str(cnt))  # save model
+            learner.save_models(scenario_name + '_fin_' + str(cnt))  # save model
 
             print('save history...')
             d = {'loss_history': loss_history,
                  'reward_episodes': reward_episodes,
                  'reward_episodes_by_agent': reward_episodes_by_agent}
-            with open('Models/history_' + str(cnt) + '.pkl', 'wb') as f:
+            with open('Models/history_' + scenario_name + '_' + str(cnt) + '.pkl', 'wb') as f:
                 pickle.dump(d, f)
 
             print('done!')
