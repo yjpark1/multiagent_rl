@@ -3,7 +3,7 @@ import multiagent.scenarios as scenarios
 from multiagent.environment import MultiAgentEnv
 
 
-def local_obs_simple_spread(agent, world):
+def local_obs_simple_spread(self, agent, world):
     """
     get positions of all entities in this agent's reference frame
     return local observation
@@ -20,9 +20,74 @@ def local_obs_simple_spread(agent, world):
     return np.concatenate([agent.state.p_vel] + [agent.state.p_pos] + entity_pos)
 
 
+def local_obs_simple_reference(self, agent, world):
+    # goal color
+    goal_color = [np.zeros(world.dim_color), np.zeros(world.dim_color)]
+    if agent.goal_b is not None:
+        goal_color[1] = agent.goal_b.color
+
+    # get positions of all entities in this agent's reference frame
+    entity_pos = []
+    for entity in world.landmarks:
+        entity_pos.append(entity.state.p_pos - agent.state.p_pos)
+    # entity colors
+    entity_color = []
+    for entity in world.landmarks:
+        entity_color.append(entity.color)
+    # communication of all other agents
+    comm = []
+    for other in world.agents:
+        if other is agent: continue
+        comm.append(other.state.c)
+    return np.concatenate([agent.state.p_vel] + entity_pos + [goal_color[1]] + comm)
+
+
+def local_obs_simple_speaker_listener(self, agent, world):
+    # goal color
+    goal_color = np.zeros(world.dim_color)
+    if agent.goal_b is not None:
+        goal_color = agent.goal_b.color
+
+    # get positions of all entities in this agent's reference frame
+    entity_pos = []
+    for entity in world.landmarks:
+        entity_pos.append(entity.state.p_pos - agent.state.p_pos)
+
+    # communication of all other agents
+    comm = []
+    for other in world.agents:
+        if other is agent or (other.state.c is None): continue
+        comm.append(other.state.c)
+
+    # speaker & listener
+    return np.concatenate([agent.state.p_vel] + entity_pos + [goal_color])
+
+
+def local_obs_multi_speaker_listener(self, agent, world):
+    obs = []
+    # give listener communication from its speaker
+    # obs += [world.speakers[agent.speak_ind].state.c]
+    # give listener its own position/velocity,
+    obs += [agent.state.p_pos, agent.state.p_vel]
+
+    # give speaker index of their listener
+    if hasattr(agent, 'listen_ind'):
+        obs += [agent.listen_ind == np.arange(len(world.listeners))]
+    else:
+        obs += [np.repeat(False, len(world.listeners))]
+
+    # give listener index of their speaker
+    if hasattr(agent, 'speak_ind'):
+        obs += [agent.speak_ind == np.arange(len(world.speakers))]
+    else:
+        obs += [np.repeat(False, len(world.speakers))]
+
+    # speaker gets position of listener and goal
+    return np.concatenate(obs)
+
+
 def local_obs_collect_treasure(self, agent, world):
-    print('local!')
-    n_visible = 7  # number of other agents and treasures visible to each agent
+    n_visible = 0  # number of other agents and treasures visible to each agent
     # get positions of all entities in this agent's reference frame
     other_agents = [a.i for a in world.agents if a is not agent]
     closest_agents = sorted(
@@ -35,9 +100,8 @@ def local_obs_collect_treasure(self, agent, world):
 
     n_treasure_types = len(world.treasure_types)
     obs = [agent.state.p_pos, agent.state.p_vel]
-    if agent.collector:
-        # collectors need to know their own state bc it changes
-        obs.append((np.arange(n_treasure_types) == agent.holding))
+    # collectors need to know their own state bc it changes
+    obs.append((np.arange(n_treasure_types) == agent.holding))
     for _, i in closest_agents:
         a = world.entities[i]
         obs.append(world.cached_dist_vect[i, agent.i])
@@ -51,33 +115,8 @@ def local_obs_collect_treasure(self, agent, world):
     return np.concatenate(obs)
 
 
-def reward_simple_spread(self, agent, world):
-    """
-    Agents are rewarded based on minimum agent distance to each landmark, 
-    penalized for collisions
-    return shared reward & individual reward 
-    """
-    rew = 0
-    for l in world.landmarks:
-        dists = [np.sqrt(np.sum(np.square(a.state.p_pos - l.state.p_pos))) for a in world.agents]
-        rew -= min(dists)
-    
-    # check collision between my agent & other agents 
-    if agent.collide:
-        for a in world.agents:
-            if self.is_collision(a, agent) & (agent != a):
-                rew -= 1
-
-    return rew
-
-# simple_spread
-# simple_reference
-# simple_speaker_listener
-# collect_treasure
-# multi_speaker_listener
-
-# scenario_name = 'simple_spread'
-def make_env(scenario_name, benchmark=False, discrete_action=True):
+def make_env(scenario_name, local_observation=True,
+             benchmark=False, discrete_action=True):
     '''
     Creates a MultiAgentEnv object as env. This can be used similar to a gym
     environment by calling env.reset() and env.step().
@@ -93,11 +132,34 @@ def make_env(scenario_name, benchmark=False, discrete_action=True):
         .observation_space  :   Returns the observation space for each agent
         .action_space       :   Returns the action space for each agent
         .n                  :   Returns the number of Agents
+    
+    simple_spread
+    simple_reference
+    simple_speaker_listener
+    collect_treasure
+    multi_speaker_listener
+
     '''
     # load scenario from script
     scenario = scenarios.load(scenario_name + ".py").Scenario()
+    if local_observation:
+        if scenario_name == 'simple_spread':
+            scenario.observation = local_obs_simple_spread.__get__(scenario)
+        elif scenario_name == 'simple_reference':
+            scenario.observation = local_obs_simple_reference.__get__(scenario)
+        elif scenario_name == 'simple_speaker_listener':
+            scenario.observation = local_obs_simple_speaker_listener.__get__(scenario)
+        elif scenario_name == 'multi_speaker_listener':
+            scenario.observation = local_obs_multi_speaker_listener.__get__(scenario)
+        elif scenario_name == 'fullobs_collect_treasure':
+            scenario.observation = local_obs_collect_treasure.__get__(scenario)
+        else:
+            print('error: unsupported scenario!')
+
     # create world
     world = scenario.make_world()
+    world.collaborative = False  # to get individual reward
+
     # create multiagent environment
     if hasattr(scenario, 'post_step'):
         post_step = scenario.post_step
@@ -120,30 +182,7 @@ def make_env(scenario_name, benchmark=False, discrete_action=True):
 
 
 if __name__ == '__main__':
-    # scenario_name = 'fullobs_collect_treasure'
-    # scenario_name = 'simple_spread'
-    # scenario_name = 'simple_reference'
-    # scenario_name = 'simple_speaker_listener'
-    scenario_name = 'multi_speaker_listener'
-
-
-    scenario = scenarios.load(scenario_name + ".py").Scenario()
-    # scenario.observation = local_obs_collect_treasure.__get__(scenario)
-    world = scenario.make_world()
-    world.collaborative = False  # to get individual reward
-
-    # <create multi-agent environment>
-    if hasattr(scenario, 'post_step'):
-        post_step = scenario.post_step
-    else:
-        post_step = None
-
-    env = MultiAgentEnv(world, reset_callback=scenario.reset_world,
-                        reward_callback=scenario.reward,
-                        observation_callback=scenario.observation,
-                        post_step_callback=post_step,
-                        discrete_action=True)
-
+    env = make_env(scenario_name='simple_spread')
     print('observation shape: ', env.observation_space)
     print('action shape: ', env.action_space)
 
@@ -153,13 +192,4 @@ if __name__ == '__main__':
     actions = to_categorical(actions, num_classes=5)
     env.reset()
     s, r, d, _ = env.step(actions)
-    env.shared_reward
     # env.close()
-
-
-
-
-
-
-
-

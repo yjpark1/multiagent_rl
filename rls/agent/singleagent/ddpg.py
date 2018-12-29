@@ -32,7 +32,7 @@ class Trainer:
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), arglist.critic_learning_rate)
 
         self.memory = memory
-        self.nb_actions = actor.nb_action
+        self.nb_actions = 5
 
         self.target_actor.eval()
         self.target_critic.eval()

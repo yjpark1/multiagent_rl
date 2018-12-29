@@ -6,40 +6,29 @@ from copy import deepcopy
 
 from rls import arglist
 from rls.replay_buffer import SequentialMemory
+from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
+from rls.agent.multiagent.model_ddpg import Trainer
+from experiments.scenarios import make_env
 
-from rls.env.make_env import make_env
 
-
-def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
+def run(env, actor, critic, Trainer, cnt=0):
     """function of learning agent
     """    
     torch.set_default_tensor_type('torch.FloatTensor')
-
-    # <create world>
-    world = scenario.make_world()
-    world.collaborative = False
-
-    # <create multi-agent environment>
-    env = MultiAgentEnv(world, scenario.reset_world, 
-                        scenario.reward, scenario.observation)
-    env.discrete_action_space = False
-    env.discrete_action_input = True
     print('observation shape: ', env.observation_space)
     print('action shape: ', env.action_space)
 
     # <create actor-critic networks>
-    actor = ActorNetwork(input_dim=10, out_dim=5)
-    critic = CriticNetwork(input_dim=10 + 5, out_dim=1)
-    memory = SequentialMemory(size=1e+6)
+    memory = SequentialMemory(limit=int(1e+6))
     learner = Trainer(actor, critic, memory)
 
     # <initial variables>
     loss_history = []
-    reward_episodes = []
-    reward_episodes_by_agent = [[0. for _ in env.n]]
+    reward_episodes = [0.]
+    reward_episodes_by_agent = [[0. for _ in range(env.n)]]
+    nb_episodes = 1
+    nb_steps = 1
     episode_steps = 0
-    nb_episodes = 0
-    nb_steps = 0
     t_start = time.time()
 
     # <initialize environment>
@@ -50,7 +39,6 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
         # <get action from agent>
         obs = learner.process_obs(obs)
         actions = learner.get_exploration_action(obs)
-        actions = learner.process_action(actions)
 
         # <run single step: send actions and return next state & reward>
         new_obs, rewards, done, info = env.step(actions)
@@ -59,14 +47,16 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
             reward_episodes_by_agent[-1][i] += r
         rewards = learner.process_reward(rewards)
         # append shared rewards
-        reward_episodes.append(rewards)
+        reward_episodes[-1] += rewards.item()
         # update step
         nb_steps += 1
+        episode_steps +=1
 
         # <get terminal condition>
         terminal = episode_steps >= arglist.max_episode_len
 
         # <insert single step (s, a, r, t) into replay memory>
+        actions = learner.process_action(actions)
         learner.memory.append(obs, actions, rewards, terminal, training=True)
 
         # <keep next state>
@@ -76,16 +66,17 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
             # <run one more step for terminate state>
             obs = learner.process_obs(obs)
             actions = learner.get_exploration_action(obs)
-            actions = learner.process_action(actions)
             
             # <process rewards>
+            reward_episodes_by_agent.append([0. for _ in range(env.n)])
             rewards = learner.process_reward(0.)
-            rewards = rewards.mean().item()
+            reward_episodes.append(rewards.item())
 
             # <process terminal>
             terminal = learner.process_done(False)
 
             # <insert terminal state (s, a, r, t) into replay memory>
+            actions = learner.process_action(actions)
             learner.memory.append(obs, actions, rewards, terminal, training=True)
 
             # <initialize environment>
@@ -94,7 +85,16 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
             # <update episode count>
             nb_episodes += 1
             episode_steps = 0
-            reward_episodes_by_agent.append([0. for _ in env.n])
+
+            # <verbose: print and append logs>
+            if nb_episodes % arglist.save_rate == 0:
+                t_end = time.time() - t_start
+                msg = 'step: {}, time: {:.1f}, episodes: {}, reward_episodes: {:.3f}'.format(nb_steps,
+                                                                                             t_end, nb_episodes,
+                                                                                             np.mean(reward_episodes[
+                                                                                                     -arglist.save_rate:]))
+                print(msg)
+                t_start = time.time()
 
         # <learning agent>
         do_learn = (nb_steps > arglist.warmup_steps) and (nb_steps % arglist.update_rate == 0) and arglist.is_training
@@ -103,19 +103,8 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
             loss = np.array([x.data.item() for x in loss])
             loss_history.append(loss)
 
-        # <update global train step count>
-        nb_steps += 1
-
-        # <verbose: print and append logs>
-        if nb_steps % arglist.save_rate:
-            t_end = time.time() - t_start
-            msg = 'step: {}, time: {:.1f}, episodes: {}, reward_episodes: {:.3f}'.format(nb_steps,
-                    t_end, nb_episodes, np.mean(reward_episodes[-arglist.save_rate:]))
-            print(msg)
-            learner.save_models(nb_episodes)  # save model
-
         # <terminate learning: steps or episodes>
-        if nb_steps > arglist.nb_steps:
+        if nb_steps > arglist.max_nb_steps:
             print('...Finished total of {} episodes and {} steps'.format(nb_episodes, nb_steps))
             learner.save_models('fin' + str(cnt))  # save model
 
@@ -123,7 +112,7 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
             d = {'loss_history': loss_history,
                  'reward_episodes': reward_episodes,
                  'reward_episodes_by_agent': reward_episodes_by_agent}
-            with open('./Models/history_' + str(cnt)) as f:
+            with open('Models/history_' + str(cnt) + '.pkl', 'wb') as f:
                 pickle.dump(d, f)
 
             print('done!')
@@ -132,21 +121,25 @@ def run(scenario, ActorNetwork, CriticNetwork, Trainer, cnt=0):
 
 if __name__ == '__main__':
     import os
-    from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
-    from rls.agent.singleagent.ddpg import Trainer
-    from multiagent.environment import MultiAgentEnv
-
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
     for cnt in range(10):
-        torch.cuda.empty_cache()
         scenario_name = 'simple_spread'
-        scenario = make_env(scenario_name, benchmark=False, discrete_action=True)
+        env = make_env(scenario_name, benchmark=False, discrete_action=True)
+        seed = cnt + 12345678
+        env.seed(seed)
+        torch.cuda.empty_cache()
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
-        actor = ActorNetwork(input_dim=18, out_dim=5)
-        critic = CriticNetwork(input_dim=18 + 5, out_dim=1)
-        run(scenario, actor, critic, Trainer, cnt=0)
+        dim_obs = env.observation_space[0].shape[0]
+        dim_action = env.action_space[0].n
+
+        actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
+        critic = CriticNetwork(input_dim=dim_obs + dim_action, out_dim=1)
+        run(env, actor, critic, Trainer, cnt=cnt)
 
 
 

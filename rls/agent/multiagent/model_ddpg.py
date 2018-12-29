@@ -63,13 +63,14 @@ class Trainer:
         return obs
 
     def process_action(self, actions):
+        actions = np.expand_dims(actions, axis=0)
         actions = torch.from_numpy(actions)
         return actions
 
     def process_reward(self, rewards):
         rewards = np.array(rewards, dtype='float32')
         rewards = np.sum(rewards)
-        rewards = torch.from_numpy(rewards)
+        rewards = torch.tensor(rewards)
         return rewards
 
     def process_done(self, done):
@@ -80,7 +81,7 @@ class Trainer:
 
     def to_onehot(self, actions):
         actions = np.argmax(actions, axis=-1)
-        actions = to_categorical(actions, num_classes=3)
+        actions = to_categorical(actions, num_classes=self.nb_actions)
         actions = actions.astype('float32')
         return actions
 
@@ -93,10 +94,8 @@ class Trainer:
         # state = np.expand_dims(state, axis=0)
         state = state.to(self.device)
         actions, _ = self.actor.forward(state)
-        actions = actions.data.cpu().numpy()
-        # OU process: (-1, 1) scale
-        actions[:, :, 0:2] = actions[:, :, 0:2] + self.noise.noise()
-        actions[:, :, 2:] = self.to_onehot(actions[:, :, 2:])
+        actions = actions[0].data.cpu().numpy()
+        actions = self.to_onehot(actions)
         return actions
 
     def process_batch(self, experiences):
@@ -104,7 +103,7 @@ class Trainer:
         a0 = torch.cat([e.action for e in experiences], dim=0)
         r = torch.stack([e.reward for e in experiences], dim=0)
         s1 = torch.cat([e.state1[0] for e in experiences], dim=0)
-        d = torch.stack([e.terminal1 for e in experiences], dim=0)
+        d = torch.stack([torch.tensor(e.terminal1, dtype=torch.float) for e in experiences], dim=0)
 
         return s0, a0, r, s1, d
 
