@@ -53,7 +53,7 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
         episode_steps +=1
 
         # <get terminal condition>
-        terminal = (episode_steps >= arglist.max_episode_len) or done
+        terminal = episode_steps >= arglist.max_episode_len
 
         # <insert single step (s, a, r, t) into replay memory>
         actions = learner.process_action(actions)
