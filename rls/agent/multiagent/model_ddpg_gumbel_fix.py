@@ -5,7 +5,8 @@ import numpy as np
 import shutil
 from rls import arglist
 import copy
-from rls.utils import to_categorical
+from rls.utils import to_categorical, onehot_from_logits, gumbel_softmax
+from rls.model.ac_network_model_multi_gumbel import TimeDistributed
 
 GAMMA = 0.95
 TAU = 0.001
@@ -93,10 +94,21 @@ class Trainer:
         """
         # state = np.expand_dims(state, axis=0)
         state = state.to(self.device)
-        actions = self.actor.forward(state)
-        actions = actions[0].data.cpu().numpy()
-        actions = self.to_onehot(actions)
+        logits, _ = self.actor.forward(state)
+        logits = logits.detach()
+        # actions = gumbel_softmax(logits, hard=True)
+        actions = self.gumbel_softmax(logits)
+        actions = actions.cpu().numpy()
         return actions
+
+    def gumbel_softmax(self, x):
+        n, t = x.size(0), x.size(1)
+        # merge batch and seq dimensions
+        x_reshape = x.contiguous().view(n * t, x.size(2))
+        y = torch.nn.functional.gumbel_softmax(x_reshape, hard=True)
+        # We have to reshape Y
+        y = y.contiguous().view(n, t, y.size()[1])
+        return y
 
     def process_batch(self, experiences):
         s0 = torch.cat([e.state0[0] for e in experiences], dim=0)
@@ -123,21 +135,24 @@ class Trainer:
 
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
-        a1 = self.target_actor.forward(s1)
-        a1 = a1.detach()
-        q_next = self.target_critic.forward(s1, a1)
+        logits1, _ = self.target_actor.forward(s1)
+        a1 = onehot_from_logits(logits1)
+        q_next, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
         # Loss: TD error
         # y_exp = r + gamma*Q'( s1, pi'(s1))
         y_expected = r + GAMMA * q_next * (1. - d)
         # y_pred = Q( s0, a0)
-        y_predicted = self.critic.forward(s0, a0)
+        y_predicted, pred_r = self.critic.forward(s0, a0)
         y_predicted = torch.squeeze(y_predicted)
+        pred_r = torch.squeeze(pred_r)
 
         # Sum. Loss
         critic_TDLoss = torch.nn.SmoothL1Loss()(y_predicted, y_expected)
+        critic_ModelLoss = torch.nn.L1Loss()(pred_r, r)
         loss_critic = critic_TDLoss
+        loss_critic += critic_ModelLoss
 
         # Update critic
         self.critic_optimizer.zero_grad()
@@ -146,10 +161,11 @@ class Trainer:
         self.critic_optimizer.step()
 
         # ---------------------- optimize actor ----------------------
-        pred_a0 = self.actor.forward(s0)
+        pred_logits0, pred_s1 = self.actor.forward(s0)
+        pred_a0 = self.gumbel_softmax(pred_logits0)
 
         # Loss: entropy for exploration
-        entropy = torch.sum(pred_a0 * torch.log(pred_a0), dim=-1).mean()
+        # entropy = torch.sum(pred_a0 * torch.log(pred_a0 + 1e-8), dim=-1).mean()
 
         # Loss: regularization
         l2_reg = torch.cuda.FloatTensor(1)
@@ -157,13 +173,17 @@ class Trainer:
             l2_reg = l2_reg + W.norm(2)
 
         # Loss: max. Q
-        Q = self.critic.forward(s0, pred_a0)
+        Q, _ = self.critic.forward(s0, pred_a0)
         actor_maxQ = -1 * Q.mean()
+
+        # Loss: env loss
+        actor_ModelLoss = torch.nn.L1Loss()(pred_s1, s1)
 
         # Sum. Loss
         loss_actor = actor_maxQ
-        loss_actor += entropy * 0.05  # <replace Gaussian noise>
-        loss_actor += torch.squeeze(l2_reg) * 0.001
+        # loss_actor += entropy * 0.05  # <replace Gaussian noise>
+        loss_actor += torch.squeeze(l2_reg) * 1e-3
+        loss_actor += actor_ModelLoss
 
         # Update actor
         # run random noise to exploration

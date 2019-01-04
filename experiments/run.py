@@ -4,6 +4,8 @@ import time
 import pickle
 from copy import deepcopy
 
+import math
+
 from rls import arglist
 from rls.replay_buffer import SequentialMemory
 from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
@@ -26,8 +28,8 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
     loss_history = []
     reward_episodes = [0.]
     reward_episodes_by_agent = [[0. for _ in range(env.n)]]
-    nb_episodes = 1
-    nb_steps = 1
+    nb_episodes = 0
+    nb_steps = 0
     episode_steps = 0
     t_start = time.time()
 
@@ -38,7 +40,7 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
     while True:
         # <get action from agent>
         obs = learner.process_obs(obs)
-        actions = learner.get_exploration_action(obs)
+        actions = learner.get_exploration_action(obs)[0]
 
         # <run single step: send actions and return next state & reward>
         new_obs, rewards, done, info = env.step(actions)
