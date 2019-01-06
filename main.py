@@ -26,6 +26,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
 
+scenarios = ['simple_spread']
+
+
 for scenario_name in scenarios:
     for cnt in range(10):
         # scenario_name = 'simple_spread'

@@ -111,7 +111,7 @@ class Trainer:
         y = y.contiguous().view(n, t, y.size()[1])
         return y
 
-    def process_batch(self, experiences):
+    def process_batch(self):
         index = self.memory.make_index(arglist.batch_size)
         # collect replay sample from all agents
         s0, a0, r, s1, d = self.memory.sample_index(index)
@@ -129,8 +129,8 @@ class Trainer:
         Samples a random batch from replay memory and performs optimization
         :return:
         """
-        experiences = self.memory.sample(arglist.batch_size)
-        s0, a0, r, s1, d = self.process_batch(experiences)
+        # experiences = self.memory.sample(arglist.batch_size)
+        s0, a0, r, s1, d = self.process_batch()
 
         s0 = s0.to(self.device)
         a0 = a0.to(self.device)

@@ -1,17 +1,17 @@
 
 # learning control
 is_training = True
-tau = 0.001
+tau = 1e-2
 actor_learning_rate = 1e-2
 critic_learning_rate = 1e-2
-batch_size = 128
+batch_size = 1024
 warmup_steps = 1000
 update_rate = 100
 max_nb_steps = 1e+6
 
 # environment control
 max_episode_len = 25
-num_episodes = 40000
+num_episodes = 60000
 reward_factor = 1
 
 # verbose control
