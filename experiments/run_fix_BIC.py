@@ -36,14 +36,12 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
         # environment step
         new_obs_n, rew_n, done_n, info_n = env.step(action_n)
 
-        # make shared reward
-        rew_shared = np.sum(rew_n)
-
         episode_step += 1
+        done_n = [float(d) for d in done_n]
         done = all(done_n)
         terminal = (episode_step >= arglist.max_episode_len)
         # collect experience
-        learner.memory.add(obs_n, action_n, rew_shared, new_obs_n, float(done))
+        learner.memory.add(obs_n, action_n, rew_n, new_obs_n, done_n)
 
         for i, rew in enumerate(rew_n):
             episode_rewards[-1] += rew
@@ -97,15 +95,15 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
 
 
 if __name__ == '__main__':
-    from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
-    from rls.agent.multiagent.ddpg_gumbel_fix import Trainer
+    from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
+    from rls.agent.multiagent.BIC_gumbel_fix import Trainer
     from experiments.scenarios import make_env
     import os
 
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
-    scenario_name = 'fullobs_collect_treasure'
+    scenario_name = 'simple_spread'
 
     env = make_env(scenario_name, benchmark=False, discrete_action=True)
     cnt = 0

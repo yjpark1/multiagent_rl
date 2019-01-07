@@ -4,12 +4,10 @@ import time
 import pickle
 from copy import deepcopy
 
-import math
-
 from rls import arglist
 from rls.replay_buffer import SequentialMemory
-from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.model_ddpg import Trainer
+from rls.model.dev.ac_network_model_multi import ActorNetwork, CriticNetwork
+from rls.agent.multiagent.dev.model_ddpg import Trainer
 from experiments.scenarios import make_env
 
 

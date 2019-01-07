@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import time
 
-from rls.model.ac_network_single import ActorNetwork, CriticNetwork
+from rls.model.dev.ac_network_single import ActorNetwork, CriticNetwork
 from rls.agent.singleagent.ddpg import Trainer
 from rls import arglist
 from rls.replay_buffer import MemoryBuffer

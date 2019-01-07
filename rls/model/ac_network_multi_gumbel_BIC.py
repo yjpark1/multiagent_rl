@@ -78,7 +78,7 @@ class CriticNetwork(nn.Module):
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
         self.lstm = nn.LSTM(64, 64, num_layers=1,
                             batch_first=True, bidirectional=False)
-        self.dense2 = nn.Linear(64, out_dim)
+        self.dense2 = TimeDistributed(nn.Linear(64, out_dim))
 
     def attention_net(self, lstm_output, final_state):
         """
@@ -124,6 +124,6 @@ class CriticNetwork(nn.Module):
         # final_hidden_state.size() = (1, batch_size, hidden_size)
         # output.size() = (batch_size, num_seq, hidden_size)
         # attn_output = self.attention_net(output, final_hidden_state)
-        out = self.dense2(output[:, -1, :])
+        out = self.dense2(output)
 
         return out

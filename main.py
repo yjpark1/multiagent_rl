@@ -5,12 +5,10 @@ import numpy as np
 # from rls.agent.multiagent.model_ddpg import Trainer
 
 # proposed
-from rls.model.ac_network_multi import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.ddpg import Trainer
 
 # proposed (gumbel) + model
-from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.model_ddpg_gumbel import Trainer
+# from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
+# from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
 
 # proposed (gumbel)
 from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork

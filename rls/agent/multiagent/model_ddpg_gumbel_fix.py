@@ -92,7 +92,9 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        # state = np.expand_dims(state, axis=0)
+        state = np.array([np.stack(state)])
+        # state = torch.from_numpy(state)
+        state = torch.tensor(state, dtype=torch.float32)
         state = state.to(self.device)
         logits, _ = self.actor.forward(state)
         logits = logits.detach()
@@ -110,12 +112,22 @@ class Trainer:
         y = y.contiguous().view(n, t, y.size()[1])
         return y
 
-    def process_batch(self, experiences):
-        s0 = torch.cat([e.state0[0] for e in experiences], dim=0)
-        a0 = torch.cat([e.action for e in experiences], dim=0)
-        r = torch.stack([e.reward for e in experiences], dim=0)
-        s1 = torch.cat([e.state1[0] for e in experiences], dim=0)
-        d = torch.stack([torch.tensor(e.terminal1, dtype=torch.float) for e in experiences], dim=0)
+    def process_batch(self):
+        # s0 = torch.cat([e.state0[0] for e in experiences], dim=0)
+        # a0 = torch.cat([e.action for e in experiences], dim=0)
+        # r = torch.stack([e.reward for e in experiences], dim=0)
+        # s1 = torch.cat([e.state1[0] for e in experiences], dim=0)
+        # d = torch.stack([torch.tensor(e.terminal1, dtype=torch.float) for e in experiences], dim=0)
+
+        index = self.memory.make_index(arglist.batch_size)
+        # collect replay sample from all agents
+        s0, a0, r, s1, d = self.memory.sample_index(index)
+
+        s0 = torch.tensor(s0, dtype=torch.float32)
+        a0 = torch.tensor(a0, dtype=torch.float32)
+        r = torch.tensor(r, dtype=torch.float32)
+        s1 = torch.tensor(s1, dtype=torch.float32)
+        d = torch.tensor(d, dtype=torch.float32)
 
         return s0, a0, r, s1, d
 
@@ -124,8 +136,8 @@ class Trainer:
         Samples a random batch from replay memory and performs optimization
         :return:
         """
-        experiences = self.memory.sample(arglist.batch_size)
-        s0, a0, r, s1, d = self.process_batch(experiences)
+        # experiences = self.memory.sample(arglist.batch_size)
+        s0, a0, r, s1, d = self.process_batch()
 
         s0 = s0.to(self.device)
         a0 = a0.to(self.device)
@@ -136,7 +148,7 @@ class Trainer:
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
         logits1, _ = self.target_actor.forward(s1)
-        a1 = onehot_from_logits(logits1)
+        a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
         q_next, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
