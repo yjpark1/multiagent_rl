@@ -15,7 +15,7 @@ class Trainer:
         """
         DDPG for categorical action
         """
-        self.device = torch.device('cuda:0')
+        self.device = torch.device('cpu')
 
         self.iter = 0
         self.actor = actor.to(self.device)
@@ -56,9 +56,7 @@ class Trainer:
             target_param.data.copy_(param.data)
 
     def process_obs(self, obs):
-        obs = np.array(obs, dtype='float32')
-        obs = np.expand_dims(obs, axis=0)
-        obs = torch.from_numpy(obs)
+        obs = np.array([np.stack(obs)], dtype='float32')
         return obs
 
     def process_action(self, actions):
@@ -90,13 +88,13 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = np.array([np.stack(state)])
-        # state = torch.from_numpy(state)
-        state = torch.tensor(state, dtype=torch.float32)
+        state = self.process_obs(state)
+        state = torch.from_numpy(state)
+        # state = torch.tensor(state, dtype=torch.float32)
         state = state.to(self.device)
         logits = self.actor.forward(state)
         logits = logits.detach()
-        actions = self.gumbel_softmax(logits, hard=True)
+        actions = self.gumbel_softmax(logits, hard=False)
         actions = actions.cpu().numpy()
         return actions
 
@@ -139,8 +137,8 @@ class Trainer:
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
         logits1 = self.target_actor.forward(s1)
-        a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
-        # a1 = self.gumbel_softmax(logits1, hard=True)
+        # a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
+        a1 = self.gumbel_softmax(logits1)
         q_next = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
@@ -163,15 +161,15 @@ class Trainer:
 
         # ---------------------- optimize actor ----------------------
         pred_logits0 = self.actor.forward(s0)
-        # pred_a0 = self.gumbel_softmax(pred_logits0, hard=False)
-        pred_a0 = torch.nn.Softmax(dim=-1)(pred_logits0)
+        pred_a0 = self.gumbel_softmax(pred_logits0)
+        # pred_a0 = torch.nn.Softmax(dim=-1)(pred_logits0)
 
         # Loss: entropy for exploration
         # pred_a0_prob = torch.nn.functional.softmax(pred_logits0, dim=-1)
         # entropy = torch.sum(pred_a0 * torch.log(pred_a0 + 1e-10), dim=-1).mean()
 
         # Loss: regularization
-        l2_reg = torch.cuda.FloatTensor(1)
+        l2_reg = torch.FloatTensor(1).to(self.device)
         for W in self.actor.parameters():
             l2_reg = l2_reg + W.norm(2)
 

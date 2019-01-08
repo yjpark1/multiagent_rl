@@ -33,8 +33,9 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
     while True:
         # get action
         action_n = learner.get_exploration_action(obs_n)[0]
+        action_n_env = [np.array(x) for x in action_n.tolist()]
         # environment step
-        new_obs_n, rew_n, done_n, info_n = env.step(action_n)
+        new_obs_n, rew_n, done_n, info_n = env.step(action_n_env)
 
         episode_step += 1
         done_n = [float(d) for d in done_n]
@@ -42,6 +43,7 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
         terminal = (episode_step >= arglist.max_episode_len)
         # collect experience
         learner.memory.add(obs_n, action_n, rew_n, new_obs_n, done_n)
+        obs_n = new_obs_n
 
         for i, rew in enumerate(rew_n):
             episode_rewards[-1] += rew

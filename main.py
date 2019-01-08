@@ -11,21 +11,18 @@ import numpy as np
 # from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
 
 # proposed (gumbel)
-from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.ddpg_gumbel_fix import Trainer
+from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
+from rls.agent.multiagent.BIC_gumbel_fix import Trainer
 
 from experiments.scenarios import make_env
-from experiments.run_fix import run
+from experiments.run_fix_BIC import run
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '-1'
 
 scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
-
-scenarios = ['simple_spread']
-
 
 for scenario_name in scenarios:
     for cnt in range(10):

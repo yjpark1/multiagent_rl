@@ -178,6 +178,7 @@ def make_env(scenario_name, local_observation=True,
                             observation_callback=scenario.observation,
                             post_step_callback=post_step,
                             discrete_action=discrete_action)
+    env.force_discrete_action = True
     return env
 
 

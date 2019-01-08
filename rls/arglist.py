@@ -1,6 +1,6 @@
 # environment control
 max_episode_len = 25
-num_episodes = 60000
+num_episodes = 40000
 reward_factor = 1
 
 # learning control
