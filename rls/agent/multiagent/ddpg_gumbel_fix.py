@@ -98,7 +98,7 @@ class Trainer:
         actions = actions.cpu().numpy()
         return actions
 
-    def gumbel_softmax(self, x, hard=False):
+    def gumbel_softmax(self, x, hard=True):
         n, t = x.size(0), x.size(1)
         # merge batch and seq dimensions
         x_reshape = x.contiguous().view(n * t, x.size(2))

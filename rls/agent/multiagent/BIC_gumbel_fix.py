@@ -15,7 +15,7 @@ class Trainer:
         """
         DDPG for categorical action
         """
-        self.device = torch.device('cpu')
+        self.device = torch.device('cuda:0')
 
         self.iter = 0
         self.actor = actor.to(self.device)

@@ -83,6 +83,12 @@ def local_obs_multi_speaker_listener(self, agent, world):
         obs += [np.repeat(False, len(world.speakers))]
 
     # speaker gets position of listener and goal
+    if agent.listener == False:
+        obs += [agent.goal_a.state.p_pos, agent.goal_b.state.p_pos]
+    else:
+        obs += [np.repeat(0., 4)]
+
+    # speaker gets position of listener and goal
     return np.concatenate(obs)
 
 
@@ -150,7 +156,8 @@ def make_env(scenario_name, local_observation=True,
         elif scenario_name == 'simple_speaker_listener':
             scenario.observation = local_obs_simple_speaker_listener.__get__(scenario)
         elif scenario_name == 'multi_speaker_listener':
-            scenario.observation = local_obs_multi_speaker_listener.__get__(scenario)
+            # scenario.observation = local_obs_multi_speaker_listener.__get__(scenario)
+            print('origin')
         elif scenario_name == 'fullobs_collect_treasure':
             scenario.observation = local_obs_collect_treasure.__get__(scenario)
         else:
@@ -183,14 +190,17 @@ def make_env(scenario_name, local_observation=True,
 
 
 if __name__ == '__main__':
-    env = make_env(scenario_name='simple_spread')
+    from keras.utils import to_categorical
+    env = make_env(scenario_name='multi_speaker_listener')
     print('observation shape: ', env.observation_space)
     print('action shape: ', env.action_space)
 
     actions = [x.sample() for x in env.action_space]
-
-    from keras.utils import to_categorical
     actions = to_categorical(actions, num_classes=5)
     env.reset()
     s, r, d, _ = env.step(actions)
+    env.render()
+    s = np.array(s)
+    s[:, 4:12]
+
     # env.close()

@@ -19,10 +19,11 @@ from experiments.run_fix_BIC import run
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = '-1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
 scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
+
 
 for scenario_name in scenarios:
     for cnt in range(10):
