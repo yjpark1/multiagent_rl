@@ -5,11 +5,9 @@ import numpy as np
 import shutil
 from rls import arglist
 import copy
-from rls.utils import to_categorical, onehot_from_logits, gumbel_softmax
-from rls.model.ac_network_model_multi_gumbel import TimeDistributed
+from rls.utils import to_categorical
 
 GAMMA = 0.95
-TAU = 0.001
 
 
 class Trainer:
@@ -58,9 +56,10 @@ class Trainer:
             target_param.data.copy_(param.data)
 
     def process_obs(self, obs):
-        obs = np.array(obs, dtype='float32')
-        obs = np.expand_dims(obs, axis=0)
-        obs = torch.from_numpy(obs)
+        obs = np.array([np.stack(obs)], dtype='float32')
+        # obs = np.array(obs, dtype='float32')
+        # obs = np.expand_dims(obs, axis=0)
+        # obs = torch.from_numpy(obs)
         return obs
 
     def process_action(self, actions):
@@ -92,33 +91,27 @@ class Trainer:
         :param state: state (Numpy array)
         :return: sampled action (Numpy array)
         """
-        state = np.array([np.stack(state)])
-        # state = torch.from_numpy(state)
-        state = torch.tensor(state, dtype=torch.float32)
+        state = self.process_obs(state)
+        state = torch.from_numpy(state)
+        state = state.to(self.device)
+        # state = torch.tensor(state, dtype=torch.float32)
         state = state.to(self.device)
         logits, _ = self.actor.forward(state)
         logits = logits.detach()
-        # actions = gumbel_softmax(logits, hard=True)
-        actions = self.gumbel_softmax(logits)
+        actions = self.gumbel_softmax(logits, hard=True)
         actions = actions.cpu().numpy()
         return actions
 
-    def gumbel_softmax(self, x):
+    def gumbel_softmax(self, x, hard=True):
         n, t = x.size(0), x.size(1)
         # merge batch and seq dimensions
         x_reshape = x.contiguous().view(n * t, x.size(2))
-        y = torch.nn.functional.gumbel_softmax(x_reshape, hard=True)
+        y = torch.nn.functional.gumbel_softmax(x_reshape, hard=hard)
         # We have to reshape Y
         y = y.contiguous().view(n, t, y.size()[1])
         return y
 
     def process_batch(self):
-        # s0 = torch.cat([e.state0[0] for e in experiences], dim=0)
-        # a0 = torch.cat([e.action for e in experiences], dim=0)
-        # r = torch.stack([e.reward for e in experiences], dim=0)
-        # s1 = torch.cat([e.state1[0] for e in experiences], dim=0)
-        # d = torch.stack([torch.tensor(e.terminal1, dtype=torch.float) for e in experiences], dim=0)
-
         index = self.memory.make_index(arglist.batch_size)
         # collect replay sample from all agents
         s0, a0, r, s1, d = self.memory.sample_index(index)
@@ -148,7 +141,8 @@ class Trainer:
         # ---------------------- optimize critic ----------------------
         # Use target actor exploitation policy here for loss evaluation
         logits1, _ = self.target_actor.forward(s1)
-        a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
+        # a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
+        a1 = self.gumbel_softmax(logits1)
         q_next, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
@@ -175,9 +169,11 @@ class Trainer:
         # ---------------------- optimize actor ----------------------
         pred_logits0, pred_s1 = self.actor.forward(s0)
         pred_a0 = self.gumbel_softmax(pred_logits0)
+        # pred_a0 = torch.nn.Softmax(dim=-1)(pred_logits0)
 
         # Loss: entropy for exploration
-        # entropy = torch.sum(pred_a0 * torch.log(pred_a0 + 1e-8), dim=-1).mean()
+        # pred_a0_prob = torch.nn.functional.softmax(pred_logits0, dim=-1)
+        # entropy = torch.sum(pred_a0 * torch.log(pred_a0 + 1e-10), dim=-1).mean()
 
         # Loss: regularization
         l2_reg = torch.cuda.FloatTensor(1)

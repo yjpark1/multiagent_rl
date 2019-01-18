@@ -6,8 +6,8 @@ reward_factor = 1
 # learning control
 is_training = True
 tau = 1e-2
-actor_learning_rate = 1e-2
-critic_learning_rate = 1e-2
+actor_learning_rate = None
+critic_learning_rate = None
 batch_size = 1024
 warmup_steps = batch_size
 update_rate = 100

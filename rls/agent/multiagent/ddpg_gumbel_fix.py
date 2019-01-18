@@ -5,7 +5,7 @@ import numpy as np
 import shutil
 from rls import arglist
 import copy
-from rls.utils import to_categorical, onehot_from_logits
+from rls.utils import to_categorical
 
 GAMMA = 0.95
 
