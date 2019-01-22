@@ -34,13 +34,18 @@ class ActorNetwork(nn.Module):
             nonlin (PyTorch function): Nonlinearity to apply to hidden layers
         """
         super(ActorNetwork, self).__init__()
-
+        self.out_dim = out_dim
         self.nonlin = F.relu
         self.dense1 = TimeDistributed(nn.Linear(input_dim, 64))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
         self.bilstm = nn.LSTM(64, 32, num_layers=1,
                               batch_first=True, bidirectional=True)
-        self.dense2 = TimeDistributed(nn.Linear(64, out_dim))
+        if len(self.out_dim) > 1:
+            self.dense2_1 = TimeDistributed(nn.Linear(64, out_dim[0]))
+            self.dense2_2 = TimeDistributed(nn.Linear(64, out_dim[1]))
+        else:
+            self.dense2 = TimeDistributed(nn.Linear(64, out_dim))
+
         self.dense3 = TimeDistributed(nn.Linear(64, input_dim))
 
     def forward(self, obs):
@@ -53,7 +58,10 @@ class ActorNetwork(nn.Module):
         hid = F.relu(self.dense1(obs))
         hid, _ = self.bilstm(hid, None)
         hid = F.relu(hid)
-        policy = self.dense2(hid)
+        if len(self.out_dim) > 1:
+            policy = [self.dense2_1(hid), self.dense2_2(hid)]
+        else:
+            policy = self.dense2(hid)
         next_state = self.dense3(hid)
         return policy, next_state
 
@@ -120,7 +128,10 @@ class CriticNetwork(nn.Module):
             out (PyTorch Matrix): Q-function
             out (PyTorch Matrix): reward
         """
-        obs_act = torch.cat((obs, action), dim=-1)
+        if type(action) is list:
+            obs_act = torch.cat([obs] + action, dim=-1)
+        else:
+            obs_act = torch.cat([obs] + [action], dim=-1)
         out = F.relu(self.dense1(obs_act))
 
         output, (final_hidden_state, final_cell_state) = self.lstm(out, None)

@@ -192,18 +192,19 @@ def make_env(scenario_name, local_observation=True,
 if __name__ == '__main__':
     from keras.utils import to_categorical
     import time
-    env = make_env(scenario_name='multi_speaker_listener')
+
+    sc = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
+          'fullobs_collect_treasure', 'multi_speaker_listener']
+
+    env = make_env(scenario_name=sc[2], local_observation=False)
     print('observation shape: ', env.observation_space)
     print('action shape: ', env.action_space)
 
     actions = [x.sample() for x in env.action_space]
+    a = env.action_space[1]
+
     actions = to_categorical(actions, num_classes=5)
     # env.reset()
     # s, r, d, _ = env.step(actions)
-    env.reset()
-    time.sleep(1.)
-    env.render()
+    s = env.reset()
 
-    # s = np.array(s)
-    # s[:, 4:12]
-    # env.close()

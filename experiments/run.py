@@ -5,144 +5,138 @@ import pickle
 from copy import deepcopy
 
 from rls import arglist
-from rls.replay_buffer import SequentialMemory
-from rls.model.dev.ac_network_model_multi import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.dev.model_ddpg import Trainer
-from experiments.scenarios import make_env
+from rls.replay_buffer import ReplayBuffer
 
 
-def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
+def run(env, actor, critic, Trainer, scenario_name=None, action_type='Discrete', cnt=0):
     """function of learning agent
-    """    
+    """
     torch.set_default_tensor_type('torch.FloatTensor')
     print('observation shape: ', env.observation_space)
     print('action shape: ', env.action_space)
 
     # <create actor-critic networks>
-    memory = SequentialMemory(limit=int(1e+6))
-    learner = Trainer(actor, critic, memory)
+    memory = ReplayBuffer(size=1e+6)
+    learner = Trainer(actor, critic, memory, action_type=action_type)
 
-    # <initial variables>
-    loss_history = []
-    reward_episodes = [0.]
-    reward_episodes_by_agent = [[0. for _ in range(env.n)]]
-    nb_episodes = 0
-    nb_steps = 0
-    episode_steps = 0
+    episode_rewards = [0.0]  # sum of rewards for all agents
+    agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
+    final_ep_rewards = []  # sum of rewards for training curve
+    final_ep_ag_rewards = []  # agent rewards for training curve
+    agent_info = [[[]]]  # placeholder for benchmarking info
+    obs_n = env.reset()
+    episode_step = 0
+    train_step = 0
     t_start = time.time()
 
-    # <initialize environment>
-    obs = env.reset()
-
-    # <run interations>
+    print('Starting iterations...')
     while True:
-        # <get action from agent>
-        obs = learner.process_obs(obs)
-        actions = learner.get_exploration_action(obs)[0]
+        # get action
+        if action_type == 'Discrete':
+            action_n = learner.get_exploration_action(obs_n)[0]
+            action_n_env = [np.array(x) for x in action_n.tolist()]
+        elif action_type == 'MultiDiscrete':
+            action_n = learner.get_exploration_action(obs_n)
+            action_n_env = [np.concatenate([x, y], axis=-1) for x, y in zip(action_n[0][0], action_n[1][0])]
 
-        # <run single step: send actions and return next state & reward>
-        new_obs, rewards, done, info = env.step(actions)
-        # append individual rewards
-        for i, r in enumerate(rewards):
-            reward_episodes_by_agent[-1][i] += r
-        rewards = learner.process_reward(rewards)
-        # append shared rewards
-        reward_episodes[-1] += rewards.item()
-        # update step
-        nb_steps += 1
-        episode_steps +=1
+        # environment step
+        new_obs_n, rew_n, done_n, info_n = env.step(action_n_env)
+        # make shared reward
+        rew_shared = np.sum(rew_n)
 
-        # <get terminal condition>
-        terminal = episode_steps >= arglist.max_episode_len
+        episode_step += 1
+        done = all(done_n)
+        terminal = (episode_step >= arglist.max_episode_len)
+        # collect experience
+        learner.memory.add(obs_n, action_n_env, rew_shared, new_obs_n, float(done))
+        obs_n = new_obs_n
 
-        # <insert single step (s, a, r, t) into replay memory>
-        actions = learner.process_action(actions)
-        learner.memory.append(obs, actions, rewards, terminal, training=True)
+        for i, rew in enumerate(rew_n):
+            episode_rewards[-1] += rew
+            agent_rewards[i][-1] += rew
 
-        # <keep next state>
-        obs = deepcopy(new_obs)
+        if done or terminal:
+            obs_n = env.reset()
+            episode_step = 0
+            episode_rewards.append(0)
+            for a in agent_rewards:
+                a.append(0)
+            agent_info.append([[]])
 
-        if terminal:
-            # <run one more step for terminate state>
-            obs = learner.process_obs(obs)
-            actions = learner.get_exploration_action(obs)
-            
-            # <process rewards>
-            reward_episodes_by_agent.append([0. for _ in range(env.n)])
-            rewards = learner.process_reward(0.)
-            reward_episodes.append(rewards.item())
+        # increment global step counter
+        train_step += 1
 
-            # <process terminal>
-            terminal = learner.process_done(False)
+        # for displaying learned policies
+        if arglist.display:
+            time.sleep(0.1)
+            env.render()
+            continue
 
-            # <insert terminal state (s, a, r, t) into replay memory>
-            actions = learner.process_action(actions)
-            learner.memory.append(obs, actions, rewards, terminal, training=True)
-
-            # <initialize environment>
-            obs = env.reset()
-
-            # <update episode count>
-            nb_episodes += 1
-            episode_steps = 0
-
-            # <verbose: print and append logs>
-            if nb_episodes % arglist.save_rate == 0:
-                t_end = time.time() - t_start
-                msg = 'step: {}, time: {:.1f}, episodes: {}, reward_episodes: {:.3f}'.format(nb_steps,
-                                                                                             t_end, nb_episodes,
-                                                                                             np.mean(reward_episodes[
-                                                                                                     -arglist.save_rate:]))
-                print(msg)
-                t_start = time.time()
-
+        # update all trainers, if not in display or benchmark mode
         # <learning agent>
-        do_learn = (nb_steps > arglist.warmup_steps) and (nb_steps % arglist.update_rate == 0) and arglist.is_training
+        do_learn = (train_step > arglist.warmup_steps) and (
+                train_step % arglist.update_rate == 0) and arglist.is_training
         if do_learn:
             loss = learner.optimize()
-            loss = np.array([x.data.item() for x in loss])
-            loss_history.append(loss)
 
-        # <terminate learning: steps or episodes>
-        if nb_steps > arglist.max_nb_steps:
-            print('...Finished total of {} episodes and {} steps'.format(nb_episodes, nb_steps))
+        # save model, display training output
+        if terminal and (len(episode_rewards) % arglist.save_rate == 0):
+            # print statement depends on whether or not there are adversaries
+            print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
+                train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
+                round(time.time() - t_start, 3)))
+            t_start = time.time()
+            # Keep track of final episode reward
+            final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
+            for rew in agent_rewards:
+                final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
+
+        # saves final episode reward for plotting training curve later
+        if len(episode_rewards) > arglist.num_episodes:
+            hist = {'reward_episodes': episode_rewards, 'reward_episodes_by_agents': agent_rewards}
+            file_name = 'Models/history_' + scenario_name + '_' + str(cnt) + '.pkl'
+            with open(file_name, 'wb') as fp:
+                pickle.dump(hist, fp)
+            print('...Finished total of {} episodes.'.format(len(episode_rewards)))
             learner.save_models(scenario_name + '_fin_' + str(cnt))  # save model
-
-            print('save history...')
-            d = {'loss_history': loss_history,
-                 'reward_episodes': reward_episodes,
-                 'reward_episodes_by_agent': reward_episodes_by_agent}
-            with open('Models/history_' + scenario_name + '_' + str(cnt) + '.pkl', 'wb') as f:
-                pickle.dump(d, f)
-
-            print('done!')
             break
 
 
 if __name__ == '__main__':
+    from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
+    from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
+    from experiments.scenarios import make_env
     import os
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+
+    arglist.actor_learning_rate = 1e-2
+    arglist.critic_learning_rate = 1e-2
+
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
     os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 
-    for cnt in range(10):
-        scenario_name = 'simple_spread'
-        env = make_env(scenario_name, benchmark=False, discrete_action=True)
-        seed = cnt + 12345678
-        env.seed(seed)
-        torch.cuda.empty_cache()
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+    cnt = 11
+    # scenario_name = 'simple_spread'
+    scenario_name = 'simple_speaker_listener'
+    env = make_env(scenario_name, benchmark=False, discrete_action=True)
+    seed = cnt + 12345678
+    env.seed(seed)
+    torch.cuda.empty_cache()
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-        dim_obs = env.observation_space[0].shape[0]
+    dim_obs = env.observation_space[0].shape[0]
+    if hasattr(env.action_space[0], 'high'):
+        dim_action = env.action_space[0].high + 1
+        dim_action = dim_action.tolist()
+        action_type = 'MultiDiscrete'
+    else:
         dim_action = env.action_space[0].n
+        action_type = 'Discrete'
 
-        actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
-        critic = CriticNetwork(input_dim=dim_obs + dim_action, out_dim=1)
-        run(env, actor, critic, Trainer, cnt=cnt)
-
-
-
+    actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
+    critic = CriticNetwork(input_dim=dim_obs + sum(dim_action), out_dim=1)
+    run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
 
 
 

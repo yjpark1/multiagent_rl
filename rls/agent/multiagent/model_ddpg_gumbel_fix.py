@@ -11,7 +11,7 @@ GAMMA = 0.95
 
 
 class Trainer:
-    def __init__(self, actor, critic, memory):
+    def __init__(self, actor, critic, memory, action_type='Discrete'):
         """
         DDPG for categorical action
         """
@@ -28,6 +28,7 @@ class Trainer:
 
         self.memory = memory
         self.nb_actions = 5
+        self.action_type = action_type  # MultiDiscrete
 
         self.target_actor.eval()
         self.target_critic.eval()
@@ -94,12 +95,18 @@ class Trainer:
         state = self.process_obs(state)
         state = torch.from_numpy(state)
         state = state.to(self.device)
-        # state = torch.tensor(state, dtype=torch.float32)
-        state = state.to(self.device)
-        logits, _ = self.actor.forward(state)
-        logits = logits.detach()
-        actions = self.gumbel_softmax(logits, hard=True)
-        actions = actions.cpu().numpy()
+
+        if self.action_type == 'Discrete':
+            logits, _ = self.actor.forward(state)
+            logits = logits.detach()
+            actions = self.gumbel_softmax(logits, hard=True)
+            actions = actions.cpu().numpy()
+        elif self.action_type == 'MultiDiscrete':
+            logits, _ = self.actor.forward(state)
+            logits = [x.detach() for x in logits]
+            actions = [self.gumbel_softmax(x, hard=True) for x in logits]
+            actions = [x.cpu().numpy() for x in actions]
+
         return actions
 
     def gumbel_softmax(self, x, hard=True):
@@ -142,7 +149,12 @@ class Trainer:
         # Use target actor exploitation policy here for loss evaluation
         logits1, _ = self.target_actor.forward(s1)
         # a1 = torch.eye(self.nb_actions)[torch.argmax(logits1, -1)].to(self.device)
-        a1 = self.gumbel_softmax(logits1)
+        if self.action_type == 'Discrete':
+            a1 = self.gumbel_softmax(logits1)
+        elif self.action_type == 'MultiDiscrete':
+            a1 = [self.gumbel_softmax(x) for x in logits1]
+            a1 = torch.cat(a1, dim=-1)
+
         q_next, _ = self.target_critic.forward(s1, a1)
         q_next = q_next.detach()
         q_next = torch.squeeze(q_next)
@@ -168,8 +180,12 @@ class Trainer:
 
         # ---------------------- optimize actor ----------------------
         pred_logits0, pred_s1 = self.actor.forward(s0)
-        pred_a0 = self.gumbel_softmax(pred_logits0)
-        # pred_a0 = torch.nn.Softmax(dim=-1)(pred_logits0)
+        if self.action_type == 'Discrete':
+            pred_a0 = self.gumbel_softmax(pred_logits0)
+            # pred_a0 = torch.nn.Softmax(dim=-1)(pred_logits0)
+        elif self.action_type == 'MultiDiscrete':
+            pred_a0 = [self.gumbel_softmax(x) for x in pred_logits0]
+            pred_a0 = torch.cat(pred_a0, dim=-1)
 
         # Loss: entropy for exploration
         # pred_a0_prob = torch.nn.functional.softmax(pred_logits0, dim=-1)

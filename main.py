@@ -44,8 +44,14 @@ for scenario_name in scenarios:
         torch.cuda.manual_seed_all(seed)
 
         dim_obs = env.observation_space[0].shape[0]
-        dim_action = env.action_space[0].n
+        if hasattr(env.action_space[0], 'high'):
+            dim_action = env.action_space[0].high + 1
+            dim_action = dim_action.tolist()
+            action_type = 'MultiDiscrete'
+        else:
+            dim_action = env.action_space[0].n
+            action_type = 'Discrete'
 
         actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
         critic = CriticNetwork(input_dim=dim_obs + dim_action, out_dim=1)
-        run(env, actor, critic, Trainer, scenario_name, cnt=cnt)
+        run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
