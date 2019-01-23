@@ -5,10 +5,10 @@ import pickle
 from copy import deepcopy
 
 from rls import arglist
-from rls.replay_buffer import SequentialMemory, ReplayBuffer
+from rls.replay_buffer import ReplayBuffer
 
 
-def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
+def run(env, actor, critic, Trainer, scenario_name=None, action_type='Discrete', cnt=0):
     """function of learning agent
     """    
     torch.set_default_tensor_type('torch.FloatTensor')
@@ -17,7 +17,7 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
 
     # <create actor-critic networks>
     memory = ReplayBuffer(size=1e+6)
-    learner = Trainer(actor, critic, memory)
+    learner = Trainer(actor, critic, memory, action_type=action_type)
 
     episode_rewards = [0.0]  # sum of rewards for all agents
     agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
@@ -32,8 +32,13 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
     print('Starting iterations...')
     while True:
         # get action
-        action_n = learner.get_exploration_action(obs_n)[0]
-        action_n_env = [np.array(x) for x in action_n.tolist()]
+        if action_type == 'Discrete':
+            action_n = learner.get_exploration_action(obs_n)[0]
+            action_n_env = [np.array(x) for x in action_n.tolist()]
+        elif action_type == 'MultiDiscrete':
+            action_n = learner.get_exploration_action(obs_n)
+            action_n_env = [np.concatenate([x, y], axis=-1) for x, y in zip(action_n[0][0], action_n[1][0])]
+
         # environment step
         new_obs_n, rew_n, done_n, info_n = env.step(action_n_env)
 
