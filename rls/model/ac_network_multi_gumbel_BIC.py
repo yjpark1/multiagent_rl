@@ -41,7 +41,7 @@ class ActorNetwork(nn.Module):
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
         self.bilstm = nn.LSTM(64, 32, num_layers=1,
                               batch_first=True, bidirectional=True)
-        if len(self.out_dim) > 1:
+        if type(self.out_dim) is list:
             self.dense2_1 = TimeDistributed(nn.Linear(64, out_dim[0]))
             self.dense2_2 = TimeDistributed(nn.Linear(64, out_dim[1]))
         else:
@@ -57,7 +57,7 @@ class ActorNetwork(nn.Module):
         hid = F.relu(self.dense1(obs))
         hid, _ = self.bilstm(hid, None)
         hid = F.relu(hid)
-        if len(self.out_dim) > 1:
+        if type(self.out_dim) is list:
             policy = [self.dense2_1(hid), self.dense2_2(hid)]
         else:
             policy = self.dense2(hid)

@@ -10,7 +10,7 @@ from rls import arglist
 # proposed (gumbel) + model
 from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
 from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
-from experiments.run_fix import run
+from experiments.run import run
 
 # BIC (gumbel)
 # from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
