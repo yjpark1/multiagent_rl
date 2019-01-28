@@ -35,7 +35,8 @@ for scenario_name in scenarios:
 
     for cnt in range(10):
         # scenario_name = 'simple_spread'
-        env = make_env(scenario_name, benchmark=False, discrete_action=True)
+        env = make_env(scenario_name, benchmark=False, discrete_action=True,
+                       local_observation=False)
         seed = cnt + 12345678
         env.seed(seed)
         torch.cuda.empty_cache()
@@ -53,5 +54,5 @@ for scenario_name in scenarios:
             action_type = 'Discrete'
 
         actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
-        critic = CriticNetwork(input_dim=dim_obs + dim_action, out_dim=1)
+        critic = CriticNetwork(input_dim=dim_obs + np.sum(dim_action), out_dim=1)
         run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
