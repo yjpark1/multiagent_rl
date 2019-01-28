@@ -8,14 +8,14 @@ from rls import arglist
 # from experiments.run_fix import run
 
 # proposed (gumbel) + model
-from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
-from experiments.run import run
+# from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
+# from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
+# from experiments.run import run
 
 # BIC (gumbel)
-# from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
-# from rls.agent.multiagent.BIC_gumbel_fix import Trainer
-# from experiments.run_fix_BIC import run
+from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
+from rls.agent.multiagent.BIC_gumbel_fix import Trainer
+from experiments.run_BIC import run
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
