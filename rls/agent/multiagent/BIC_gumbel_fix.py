@@ -94,12 +94,12 @@ class Trainer:
         state = state.to(self.device)
 
         if self.action_type == 'Discrete':
-            logits, _ = self.actor.forward(state)
+            logits = self.actor.forward(state)
             logits = logits.detach()
             actions = self.gumbel_softmax(logits, hard=True)
             actions = actions.cpu().numpy()
         elif self.action_type == 'MultiDiscrete':
-            logits, _ = self.actor.forward(state)
+            logits = self.actor.forward(state)
             logits = [x.detach() for x in logits]
             actions = [self.gumbel_softmax(x, hard=True) for x in logits]
             actions = [x.cpu().numpy() for x in actions]
