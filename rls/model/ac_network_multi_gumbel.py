@@ -37,6 +37,7 @@ class ActorNetwork(nn.Module):
         super(ActorNetwork, self).__init__()
 
         self.nonlin = F.relu
+        self.out_dim = out_dim
         self.dense1 = TimeDistributed(nn.Linear(input_dim, 64))
         # return sequence is not exist in pytorch. Instead, output will return with first dimension for sequences.
         self.bilstm = nn.LSTM(64, 32, num_layers=1,
