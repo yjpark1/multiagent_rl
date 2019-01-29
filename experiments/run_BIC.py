@@ -47,7 +47,7 @@ def run(env, actor, critic, Trainer, scenario_name=None, action_type='Discrete',
         done = all(done_n)
         terminal = (episode_step >= arglist.max_episode_len)
         # collect experience
-        learner.memory.add(obs_n, action_n, rew_n, new_obs_n, done_n)
+        learner.memory.add(obs_n, action_n_env, rew_n, new_obs_n, done_n)
         obs_n = new_obs_n
 
         for i, rew in enumerate(rew_n):
