@@ -223,24 +223,24 @@ class Trainer:
 
         return loss_actor, loss_critic
 
-    def save_models(self, episode_count):
+    def save_models(self, fname):
         """
         saves the target actor and critic models
         :param episode_count: the count of episodes iterated
         :return:
         """
-        torch.save(self.target_actor.state_dict(), './Models/' + str(episode_count) + '_actor.pt')
-        torch.save(self.target_critic.state_dict(), './Models/' + str(episode_count) + '_critic.pt')
+        torch.save(self.target_actor.state_dict(), './Models/' + str(fname) + '_actor.pt')
+        torch.save(self.target_critic.state_dict(), './Models/' + str(fname) + '_critic.pt')
         print('Models saved successfully')
 
-    def load_models(self, episode):
+    def load_models(self, fname):
         """
         loads the target actor and critic models, and copies them onto actor and critic models
         :param episode: the count of episodes iterated (used to find the file name)
         :return:
         """
-        self.actor.load_state_dict(torch.load('./Models/' + str(episode) + '_actor.pt'))
-        self.critic.load_state_dict(torch.load('./Models/' + str(episode) + '_critic.pt'))
+        self.actor.load_state_dict(torch.load('./Models/' + str(fname) + '_actor.pt'))
+        self.critic.load_state_dict(torch.load('./Models/' + str(fname) + '_critic.pt'))
         self.hard_update(self.target_actor, self.actor)
         self.hard_update(self.target_critic, self.critic)
         print('Models loaded succesfully')

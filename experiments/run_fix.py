@@ -97,6 +97,95 @@ def run(env, actor, critic, Trainer, scenario_name=None, cnt=0):
             break
 
 
+def run_test(env, actor, critic, Trainer, scenario_name=None, cnt=0):
+    """function of learning agent
+    """
+    torch.set_default_tensor_type('torch.FloatTensor')
+    print('observation shape: ', env.observation_space)
+    print('action shape: ', env.action_space)
+
+    # <create actor-critic networks>
+    memory = ReplayBuffer(size=1e+6)
+    learner = Trainer(actor, critic, memory)
+
+    episode_rewards = [0.0]  # sum of rewards for all agents
+    agent_rewards = [[0.0] for _ in range(env.n)]  # individual agent reward
+    final_ep_rewards = []  # sum of rewards for training curve
+    final_ep_ag_rewards = []  # agent rewards for training curve
+    agent_info = [[[]]]  # placeholder for benchmarking info
+    obs_n = env.reset()
+    episode_step = 0
+    train_step = 0
+    t_start = time.time()
+
+    print('Starting iterations...')
+    while True:
+        # get action
+        action_n = learner.get_exploration_action(obs_n)[0]
+        action_n_env = [np.array(x) for x in action_n.tolist()]
+        # environment step
+        new_obs_n, rew_n, done_n, info_n = env.step(action_n_env)
+        # make shared reward
+        rew_shared = np.sum(rew_n)
+
+        episode_step += 1
+        done = all(done_n)
+        terminal = (episode_step >= arglist.max_episode_len)
+        # collect experience
+        learner.memory.add(obs_n, action_n, rew_shared, new_obs_n, float(done))
+        obs_n = new_obs_n
+
+        for i, rew in enumerate(rew_n):
+            episode_rewards[-1] += rew
+            agent_rewards[i][-1] += rew
+
+        if done or terminal:
+            obs_n = env.reset()
+            episode_step = 0
+            episode_rewards.append(0)
+            for a in agent_rewards:
+                a.append(0)
+            agent_info.append([[]])
+
+        # increment global step counter
+        train_step += 1
+
+        # for displaying learned policies
+        if arglist.display:
+            time.sleep(0.1)
+            env.render()
+            continue
+
+        # update all trainers, if not in display or benchmark mode
+        # <learning agent>
+        do_learn = (train_step > arglist.warmup_steps) and (
+                train_step % arglist.update_rate == 0) and arglist.is_training
+        if do_learn:
+            loss = learner.optimize()
+
+        # save model, display training output
+        if terminal and (len(episode_rewards) % arglist.save_rate == 0):
+            # print statement depends on whether or not there are adversaries
+            print("steps: {}, episodes: {}, mean episode reward: {}, time: {}".format(
+                train_step, len(episode_rewards), np.mean(episode_rewards[-arglist.save_rate:]),
+                round(time.time() - t_start, 3)))
+            t_start = time.time()
+            # Keep track of final episode reward
+            final_ep_rewards.append(np.mean(episode_rewards[-arglist.save_rate:]))
+            for rew in agent_rewards:
+                final_ep_ag_rewards.append(np.mean(rew[-arglist.save_rate:]))
+
+        # saves final episode reward for plotting training curve later
+        if len(episode_rewards) > arglist.num_episodes:
+            hist = {'reward_episodes': episode_rewards, 'reward_episodes_by_agents': agent_rewards}
+            file_name = 'Models/history_' + scenario_name + '_' + str(cnt) + '.pkl'
+            with open(file_name, 'wb') as fp:
+                pickle.dump(hist, fp)
+            print('...Finished total of {} episodes.'.format(len(episode_rewards)))
+            learner.save_models(scenario_name + '_fin_' + str(cnt))  # save model
+            break
+
+
 if __name__ == '__main__':
     from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
     from rls.agent.multiagent.ddpg_gumbel_fix import Trainer

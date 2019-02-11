@@ -5,17 +5,17 @@ from rls import arglist
 # proposed + model
 # from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
 # from rls.agent.multiagent.model_ddpg import Trainer
-# from experiments.run_fix import run
+# from experiments.run_fix import run, run_test
 
 # proposed (gumbel) + model
 # from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
 # from rls.agent.multiagent.model_ddpg_gumbel_fix import Trainer
-# from experiments.run import run
+# from experiments.run import run, run_test
 
 # BIC (gumbel)
 from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
 from rls.agent.multiagent.BIC_gumbel_fix import Trainer
-from experiments.run_BIC import run
+from experiments.run_BIC import run, run_test
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
@@ -24,6 +24,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
 
+TEST_ONLY = True
 
 for scenario_name in scenarios:
     if scenario_name == 'fullobs_collect_treasure':
@@ -55,4 +56,8 @@ for scenario_name in scenarios:
 
         actor = ActorNetwork(input_dim=dim_obs, out_dim=dim_action)
         critic = CriticNetwork(input_dim=dim_obs + np.sum(dim_action), out_dim=1)
-        run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
+
+        if TEST_ONLY:
+            run_test(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
+        else:
+            run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
