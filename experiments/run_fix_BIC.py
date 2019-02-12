@@ -180,7 +180,9 @@ def run_test(env, actor, critic, Trainer, scenario_name=None,
 
         # saves final episode reward for plotting training curve later
         if len(episode_rewards) > arglist.num_episodes:
-            hist = {'reward_episodes': episode_rewards, 'reward_episodes_by_agents': agent_rewards}
+            hist = {'reward_episodes': episode_rewards,
+                    'reward_episodes_by_agents': agent_rewards,
+                    'memory': memory}
             file_name = 'Models/test_history_' + scenario_name + '_' + str(cnt) + '.pkl'
             with open(file_name, 'wb') as fp:
                 pickle.dump(hist, fp)

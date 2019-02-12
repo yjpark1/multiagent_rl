@@ -2,10 +2,10 @@ import torch
 import numpy as np
 from experiments.scenarios import make_env
 from rls import arglist
-# proposed + model
-# from rls.model.ac_network_model_multi import ActorNetwork, CriticNetwork
-# from rls.agent.multiagent.model_ddpg import Trainer
-# from experiments.run_fix import run, run_test
+# proposed (gumbel)
+# from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
+# from rls.agent.multiagent.ddpg_gumbel_fix import Trainer
+# from experiments.run import run, run_test
 
 # proposed (gumbel) + model
 # from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
@@ -58,6 +58,7 @@ for scenario_name in scenarios:
         critic = CriticNetwork(input_dim=dim_obs + np.sum(dim_action), out_dim=1)
 
         if TEST_ONLY:
+            arglist.num_episodes = 100
             run_test(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
         else:
             run(env, actor, critic, Trainer, scenario_name, action_type, cnt=cnt)
