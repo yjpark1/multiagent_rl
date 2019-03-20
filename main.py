@@ -3,9 +3,9 @@ import numpy as np
 from experiments.scenarios import make_env
 from rls import arglist
 # proposed (gumbel)
-# from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
-# from rls.agent.multiagent.ddpg_gumbel_fix import Trainer
-# from experiments.run import run, run_test
+from rls.model.ac_network_multi_gumbel import ActorNetwork, CriticNetwork
+from rls.agent.multiagent.ddpg_gumbel_fix import Trainer
+from experiments.run import run, run_test
 
 # proposed (gumbel) + model
 # from rls.model.ac_network_model_multi_gumbel import ActorNetwork, CriticNetwork
@@ -13,13 +13,13 @@ from rls import arglist
 # from experiments.run import run, run_test
 
 # BIC (gumbel)
-from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
-from rls.agent.multiagent.BIC_gumbel_fix import Trainer
-from experiments.run_BIC import run, run_test
+# from rls.model.ac_network_multi_gumbel_BIC import ActorNetwork, CriticNetwork
+# from rls.agent.multiagent.BIC_gumbel_fix import Trainer
+# from experiments.run_BIC import run, run_test
 
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
 scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
@@ -34,11 +34,14 @@ for scenario_name in scenarios:
         arglist.actor_learning_rate = 1e-2
         arglist.critic_learning_rate = 1e-2
 
-    for cnt in range(10):
+    for cnt in range(1):
         # scenario_name = 'simple_spread'
         env = make_env(scenario_name, benchmark=False, discrete_action=True,
-                       local_observation=False)
+                       local_observation=True)
         seed = cnt + 12345678
+
+        # print(env.observation_space)
+
         env.seed(seed)
         torch.cuda.empty_cache()
         np.random.seed(seed)

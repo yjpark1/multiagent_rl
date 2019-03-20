@@ -128,7 +128,7 @@ class Trainer:
 
         return s0, a0, r, s1, d
 
-    def optimize(self):
+    def optimize(self, test=False):
         """
         Samples a random batch from replay memory and performs optimization
         :return:
@@ -199,17 +199,22 @@ class Trainer:
         # loss_actor += entropy * 1e-2  # <replace Gaussian noise>
         loss_actor += torch.squeeze(l2_reg) * 1e-3
 
-        # Update actor
-        # run random noise to exploration
-        self.actor.train()
-        self.actor_optimizer.zero_grad()
-        loss_actor.backward()
-        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-        self.actor_optimizer.step()
+        if not test:
+            # Update actor
+            # run random noise to exploration
+            self.actor.train()
+            self.actor_optimizer.zero_grad()
+            loss_actor.backward()
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+            self.actor_optimizer.step()
 
-        # Update target env
-        self.soft_update(self.target_actor, self.actor, arglist.tau)
-        self.soft_update(self.target_critic, self.critic, arglist.tau)
+            # Update target env
+            self.soft_update(self.target_actor, self.actor, arglist.tau)
+            self.soft_update(self.target_critic, self.critic, arglist.tau)
+        else:
+            self.actor.train()
+            self.actor_optimizer.zero_grad()
+            loss_actor.backward()
 
         return loss_actor, loss_critic
 

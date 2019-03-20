@@ -12,15 +12,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set(palette="Set2")
 
-scenarios = ['simple_spread', 'simple_reference', 'simple_speaker_listener',
+scenarios = ['simple_spread', 'simple_speaker_listener',
              'fullobs_collect_treasure', 'multi_speaker_listener']
 
+index = 'env_origin'
+
 loc_dir = {
-            'MADDPG': 'Models/maddpg',
-            'BiCNet': 'Models/BICnet',
-            'MAAC': 'Models/MAAC',
-            'Proposed': 'Models/proposed+gumbel',
-            'Proposed+model': 'Models/proposed+gumbel+model',
+            'MADDPG': 'Models/' + index + '/maddpg',
+            'BiCNet': 'Models/' + index + '/BICnet',
+            'MAAC': 'Models/' + index + '/MAAC',
+            'MADR': 'Models/' + index + '/proposed+gumbel',
+            'MADR+AML': 'Models/' + index + '/proposed+gumbel+model',
            }
 
 N = 40000
@@ -30,6 +32,7 @@ def readResult(root, scenario):
     # scenario = scenarios[0]
     files = os.listdir(root)
     files = [x for x in files if 'history' in x]
+    files = [x for x in files if not 'test' in x]
     sc_files = [x for x in files if scenario in x]
     rewards = []
     for f in sc_files:
@@ -46,8 +49,9 @@ def Plot(sc_index):
     result = {
               'MADDPG': 0,
               'BiCNet': 0,
-              'Proposed': 0,
-              'Proposed+model': 0,
+              'MAAC': 0,
+              'MADR': 0,
+              'MADR+AML': 0,
              }
 
     for mth, root in loc_dir.items():
@@ -63,7 +67,7 @@ def Plot(sc_index):
     for k, re in result.items():
         for seed, reward in enumerate(re):
             reward = reward.tolist()
-            reward = pd.DataFrame(reward).rolling(window=100).mean()
+            reward = pd.DataFrame(reward).rolling(window=50).mean()
             reward = reward.dropna().values
             reward = reward.flatten()
 
@@ -79,18 +83,18 @@ def Plot(sc_index):
             data_smt['Reward'] += reward
 
     a_smt = pd.DataFrame(data_smt)
-    plt.subplots(figsize=(8,6))
+    plt.subplots(figsize=(5,3.75))
     sns.lineplot(x="Episode", y="Reward",
                  hue="Method", data=a_smt, n_boot=10,
                  ci=95)
+    plt.savefig(scenarios[sc_index] + '_' + index + '_new.png',
+                dpi=250, bbox_inches='tight')
     plt.show()
-    plt.savefig(scenarios[sc_index] + '.png', dpi=100)
-
 
 #######
-Plot(sc_index=0)
-Plot(sc_index=3)
-Plot(sc_index=4)
-
-for sc_index in range(5):
+for sc_index in range(4):
     Plot(sc_index)
+
+#a = 5/4
+#print(4 * a)
+#print(3 * a)

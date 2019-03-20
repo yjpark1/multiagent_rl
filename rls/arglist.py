@@ -19,7 +19,7 @@ save_rate = 1000
 exp_name = 'model_'
 
 # train model path appendix
-appx = 'env_origin/BICnet/'
+appx = 'env_partial/proposed+gumbel/'
 
 # actions
 # 0: nothing

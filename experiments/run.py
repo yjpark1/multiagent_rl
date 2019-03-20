@@ -169,6 +169,13 @@ def run_test(env, actor, critic, Trainer, scenario_name=None,
             env.render()
             continue
 
+        # update all trainers, if not in display or benchmark mode
+        # <learning agent>
+        do_learn = (train_step > arglist.warmup_steps) and (
+                train_step % arglist.update_rate == 0) and arglist.is_training
+        if do_learn:
+            loss = learner.optimize()
+
         # save model, display training output
         if terminal and (len(episode_rewards) % 10 == 0):
             # print statement depends on whether or not there are adversaries
