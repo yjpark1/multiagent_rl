@@ -7,7 +7,6 @@ from rls import arglist
 import copy
 from rls.utils import to_categorical
 from rls.agent.singleagent.policy import LinearAnnealedPolicy
-import time
 
 GAMMA = arglist.gamma
 
@@ -114,7 +113,7 @@ class Trainer:
             actions = actions.cpu().numpy()
             # random exploration
             value = self.wrampup_rnd.get_current_value(step=self.step)
-            if np.random.uniform() < -1:
+            if np.random.uniform() < value:
                 actions = np.random.randint(self.nb_actions)
                 actions = [self.to_onehot(actions)]
             self.step += 1
@@ -267,7 +266,7 @@ class Trainer:
         self.hard_update(self.target_critic, self.critic)
         print('Models loaded succesfully')
 
-    def save_training_checkpoint(self, fname, is_best):
+    def save_training_checkpoint(self, state, is_best, episode_count):
         """
         Saves the models, with all training parameters intact
         :param state:
@@ -275,5 +274,7 @@ class Trainer:
         :param filename:
         :return:
         """
+        filename = str(episode_count) + 'checkpoint.path.rar'
+        torch.save(state, filename)
         if is_best:
-            self.save_models(fname)
+            shutil.copyfile(filename, 'model_best.pth.tar')
