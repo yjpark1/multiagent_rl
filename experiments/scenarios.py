@@ -121,7 +121,7 @@ def local_obs_collect_treasure(self, agent, world):
     return np.concatenate(obs)
 
 
-def make_env(scenario_name, local_observation=True,
+def make_env(scenario_name, n=None, local_observation=True,
              benchmark=False, discrete_action=True):
     '''
     Creates a MultiAgentEnv object as env. This can be used similar to a gym
@@ -164,7 +164,10 @@ def make_env(scenario_name, local_observation=True,
             print('error: unsupported scenario!')
 
     # create world
-    world = scenario.make_world()
+    if n is None:
+        world = scenario.make_world()
+    else:
+        world = scenario.make_world(num_agents=n)
     world.collaborative = False  # to get individual reward
 
     # create multiagent environment
